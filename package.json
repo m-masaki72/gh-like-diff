@@ -1,0 +1,55 @@
+{
+  "name": "gh-like-diff",
+  "version": "1.0.0",
+  "description": "GitHub-quality diff views, anywhere. Offline, interactive, shareable.",
+  "keywords": ["git", "diff", "html", "viewer", "side-by-side", "code-review", "offline"],
+  "license": "MIT",
+  "author": "m-masaki72",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m-masaki72/gh-like-diff.git"
+  },
+  "homepage": "https://github.com/m-masaki72/gh-like-diff",
+  "bugs": {
+    "url": "https://github.com/m-masaki72/gh-like-diff/issues"
+  },
+  "bin": {
+    "gh-like-diff": "./dist/gh-like-diff.js"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "diff2html": "^3.4.48",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
