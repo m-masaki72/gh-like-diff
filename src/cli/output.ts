@@ -1,9 +1,25 @@
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir, tmpdir, platform } from 'node:os';
 
 const OUTPUT_DIR = join(tmpdir(), 'gh-like-diff');
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function cleanOldFiles(dir: string): void {
+  try {
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith('.html')) continue;
+      const filePath = join(dir, name);
+      const age = Date.now() - statSync(filePath).mtimeMs;
+      if (age > MAX_AGE_MS) {
+        unlinkSync(filePath);
+      }
+    }
+  } catch {
+    // Ignore errors — cleanup is best-effort
+  }
+}
 
 export function resolveOutputPath(saveName?: string): string {
   if (saveName) {
@@ -11,6 +27,7 @@ export function resolveOutputPath(saveName?: string): string {
   }
 
   mkdirSync(OUTPUT_DIR, { recursive: true });
+  cleanOldFiles(OUTPUT_DIR);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return join(OUTPUT_DIR, `diff_${timestamp}.html`);
 }

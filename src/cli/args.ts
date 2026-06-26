@@ -41,7 +41,7 @@ export function parseArgs(argv: string[]): CliOptions {
     style: opts.style === 'line' ? 'line' : 'side',
     staged: opts.staged,
     file: opts.file,
-    context: parseInt(opts.context, 10) || 3,
+    context: Number.isNaN(parseInt(opts.context, 10)) ? 3 : parseInt(opts.context, 10),
     save: opts.save,
     noOpen: opts.open === false,
     json: opts.json,

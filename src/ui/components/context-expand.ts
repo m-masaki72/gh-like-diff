@@ -2,7 +2,7 @@ export function getContextExpandScript(): string {
   return `
 (function() {
   window.__gld = window.__gld || {};
-  var EXPAND_STEP = 10;
+  var EXPAND_STEP = 20;
 
   function escHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -23,107 +23,177 @@ export function getContextExpandScript(): string {
     return sources[path] || null;
   }
 
-  function buildContextRows(oldStart, newStart, count, lines, isSide) {
+  function buildContextRows(oldStart, newStart, count, lines, isSide, fileIdx) {
     var html = '';
+    var fi = 'data-file-idx="' + fileIdx + '"';
     for (var i = 0; i < count; i++) {
       var newNum = newStart + i;
       var oldNum = oldStart + i;
       var content = escHtml(lines[newNum - 1] || '');
       if (isSide) {
         html += '<tr class="gp-ctx">' +
-          '<td class="gp-ln gp-ctx">' + oldNum + '</td>' +
+          '<td class="gp-ln gp-ctx" ' + fi + ' data-ln="' + oldNum + '" data-side="L">' + oldNum + '</td>' +
           '<td class="gp-code gp-ctx">' + content + '</td>' +
-          '<td class="gp-ln gp-ctx">' + newNum + '</td>' +
+          '<td class="gp-ln gp-ctx" ' + fi + ' data-ln="' + newNum + '" data-side="R">' + newNum + '</td>' +
           '<td class="gp-code gp-ctx">' + content + '</td></tr>';
       } else {
         html += '<tr class="gp-ctx">' +
-          '<td class="gp-ln">' + newNum + '</td>' +
-          '<td class="gp-ln">' + oldNum + '</td>' +
+          '<td class="gp-ln" ' + fi + ' data-ln="' + newNum + '" data-side="R">' + newNum + '</td>' +
+          '<td class="gp-ln" ' + fi + ' data-ln="' + oldNum + '" data-side="L">' + oldNum + '</td>' +
           '<td class="gp-code"><span class="gp-prefix"> </span>' + content + '</td></tr>';
       }
     }
     return html;
   }
 
-  function insertRowsBefore(tr, html) {
+  function insertRowsBefore(ref, html) {
     var temp = document.createElement('tbody');
     temp.innerHTML = html;
-    var parent = tr.parentNode;
+    var parent = ref.parentNode;
     while (temp.firstChild) {
-      parent.insertBefore(temp.firstChild, tr);
+      parent.insertBefore(temp.firstChild, ref);
     }
   }
 
-  function updateExpandLabel(tr) {
-    var newStart = parseInt(tr.dataset.newStart);
-    var newEnd = parseInt(tr.dataset.newEnd);
-    var remaining = newEnd - newStart + 1;
-    var btn = tr.querySelector('.gp-expand-btn-row');
-    if (btn) btn.textContent = '\\u2195 Show ' + remaining + ' hidden lines';
+  function insertRowsAfter(ref, html) {
+    var temp = document.createElement('tbody');
+    temp.innerHTML = html;
+    var parent = ref.parentNode;
+    var next = ref.nextSibling;
+    while (temp.firstChild) {
+      if (next) {
+        parent.insertBefore(temp.firstChild, next);
+      } else {
+        parent.appendChild(temp.firstChild);
+      }
+    }
   }
 
-  window.__gld.expandContext = function(btn) {
-    var tr = btn.closest('.gp-expand-row');
-    if (!tr) return;
+  // --- Gap row helpers (single-row expand UI) ---
 
-    var fileIdx = parseInt(tr.dataset.fileIdx);
-    var oldStart = parseInt(tr.dataset.oldStart);
-    var oldEnd = parseInt(tr.dataset.oldEnd);
-    var newStart = parseInt(tr.dataset.newStart);
-    var newEnd = parseInt(tr.dataset.newEnd);
+  function syncGapData(row, newStart, newEnd, oldStart, oldEnd) {
+    var remaining = newEnd - newStart + 1;
+    if (remaining <= 0) {
+      removeGap(row);
+      return;
+    }
+    row.dataset.newStart = String(newStart);
+    row.dataset.newEnd = String(newEnd);
+    row.dataset.oldStart = String(oldStart);
+    row.dataset.oldEnd = String(oldEnd);
+    var labelEl = row.querySelector('.gp-expand-label .gp-hunk-text');
+    if (labelEl) {
+      labelEl.textContent = remaining + ' hidden lines';
+    }
+  }
 
-    var path = getFilePath(fileIdx);
-    if (!path) return;
-    var lines = getFileLines(path);
-    if (!lines) return;
+  function removeGap(row) {
+    var gapId = row.dataset && row.dataset.gapId;
+    if (gapId) {
+      var hunk = document.querySelector('.gp-hunk[data-gap-id="' + gapId + '"]');
+      if (hunk) hunk.style.display = 'none';
+    }
+    row.remove();
+  }
 
-    // Resolve EOF markers
+  function resolveEof(row, lines) {
+    var newStart = parseInt(row.dataset.newStart);
+    var oldStart = parseInt(row.dataset.oldStart);
+    var newEnd = parseInt(row.dataset.newEnd);
+    var oldEnd = parseInt(row.dataset.oldEnd);
     if (newEnd === -1) {
       newEnd = lines.length;
       oldEnd = oldStart + (newEnd - newStart);
+      syncGapData(row, newStart, newEnd, oldStart, oldEnd);
     }
+    return { newStart: newStart, newEnd: newEnd, oldStart: oldStart, oldEnd: oldEnd };
+  }
 
-    if (newStart > newEnd) { tr.remove(); return; }
-
-    var table = tr.closest('.gp-diff-table');
+  function getExpandContext(btn) {
+    var row = btn.closest('.gp-expand-row');
+    if (!row) return null;
+    var fileIdx = parseInt(row.dataset.fileIdx);
+    var path = getFilePath(fileIdx);
+    if (!path) return null;
+    var lines = getFileLines(path);
+    if (!lines) return null;
+    var r = resolveEof(row, lines);
+    if (!r || r.newStart > r.newEnd) { removeGap(row); return null; }
+    var table = row.closest('.gp-diff-table');
     var isSide = table && table.classList.contains('gp-side-table');
-    var total = newEnd - newStart + 1;
+    return { row: row, lines: lines, r: r, isSide: isSide };
+  }
+
+  // --- Expand functions (GitHub-style: ▲ shows top, ▼ shows bottom) ---
+
+  // ▲ click — show the TOP of the hidden range (rows go ABOVE the expand row).
+  window.__gld.expandUp = function(btn) {
+    var ctx = getExpandContext(btn);
+    if (!ctx) return;
+    var r = ctx.r;
+    var total = r.newEnd - r.newStart + 1;
 
     if (total <= EXPAND_STEP) {
-      // Expand all remaining and remove the row
-      var html = buildContextRows(oldStart, newStart, total, lines, isSide);
-      insertRowsBefore(tr, html);
-      tr.remove();
+      var html = buildContextRows(r.oldStart, r.newStart, total, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+      insertRowsBefore(ctx.row, html);
+      removeGap(ctx.row);
     } else {
-      // Expand EXPAND_STEP lines, keep the row for the rest
-      var html = buildContextRows(oldStart, newStart, EXPAND_STEP, lines, isSide);
-      insertRowsBefore(tr, html);
-      tr.dataset.oldStart = String(oldStart + EXPAND_STEP);
-      tr.dataset.newStart = String(newStart + EXPAND_STEP);
-      updateExpandLabel(tr);
+      var html = buildContextRows(r.oldStart, r.newStart, EXPAND_STEP, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+      insertRowsBefore(ctx.row, html);
+      syncGapData(ctx.row, r.newStart + EXPAND_STEP, r.newEnd, r.oldStart + EXPAND_STEP, r.oldEnd);
     }
   };
 
-  // Resolve EOF expand rows on page load
+  // ▼ click — show the BOTTOM of the hidden range (rows go BELOW the expand row).
+  window.__gld.expandDown = function(btn) {
+    var ctx = getExpandContext(btn);
+    if (!ctx) return;
+    var r = ctx.r;
+    var total = r.newEnd - r.newStart + 1;
+
+    if (total <= EXPAND_STEP) {
+      var html = buildContextRows(r.oldStart, r.newStart, total, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+      insertRowsAfter(ctx.row, html);
+      removeGap(ctx.row);
+    } else {
+      var count = EXPAND_STEP;
+      var expandNewStart = r.newEnd - count + 1;
+      var expandOldStart = r.oldEnd - count + 1;
+      var html = buildContextRows(expandOldStart, expandNewStart, count, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+      insertRowsAfter(ctx.row, html);
+      syncGapData(ctx.row, r.newStart, expandNewStart - 1, r.oldStart, expandOldStart - 1);
+    }
+  };
+
+  window.__gld.expandAll = function(btn) {
+    var ctx = getExpandContext(btn);
+    if (!ctx) return;
+    var r = ctx.r;
+    var total = r.newEnd - r.newStart + 1;
+    var html = buildContextRows(r.oldStart, r.newStart, total, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+    insertRowsBefore(ctx.row, html);
+    removeGap(ctx.row);
+  };
+
+  // Resolve EOF expand rows (data-new-end="-1") once we know the file length.
   document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.gp-expand-row').forEach(function(tr) {
-      var newEnd = parseInt(tr.dataset.newEnd);
+    document.querySelectorAll('.gp-expand-row').forEach(function(row) {
+      var newEnd = parseInt(row.dataset.newEnd);
       if (newEnd !== -1) return;
 
-      var fileIdx = parseInt(tr.dataset.fileIdx);
-      var newStart = parseInt(tr.dataset.newStart);
+      var fileIdx = parseInt(row.dataset.fileIdx);
+      var newStart = parseInt(row.dataset.newStart);
+      var oldStart = parseInt(row.dataset.oldStart);
       var path = getFilePath(fileIdx);
-      if (!path) { tr.remove(); return; }
+      if (!path) { removeGap(row); return; }
       var lines = getFileLines(path);
-      if (!lines) { tr.remove(); return; }
+      if (!lines) { removeGap(row); return; }
 
       var remaining = lines.length - newStart + 1;
       if (remaining <= 0) {
-        tr.remove();
+        removeGap(row);
       } else {
-        tr.dataset.newEnd = String(lines.length);
-        tr.dataset.oldEnd = String(parseInt(tr.dataset.oldStart) + remaining - 1);
-        updateExpandLabel(tr);
+        syncGapData(row, newStart, lines.length, oldStart, oldStart + remaining - 1);
       }
     });
   });

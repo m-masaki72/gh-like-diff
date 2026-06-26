@@ -79,6 +79,14 @@ export function buildHtml(options: TemplateOptions): string {
     <span class="gp-stats-add">+${stats.totalAdditions}</span>,
     <span class="gp-stats-del">-${stats.totalDeletions}</span>
   </span>
+  <div class="gp-toolbar-sep"></div>
+  <div id="gp-review-progress" class="gp-review-progress">
+    <div class="gp-review-bar"><div class="gp-review-bar-fill"></div></div>
+    <span class="gp-review-count">0/${stats.fileCount}</span>
+  </div>
+  <button class="gp-btn" onclick="window.__gld.toggleMemoPanel()" title="Review memos">📝 <span id="gp-memo-count">0</span></button>
+  <div class="gp-toolbar-sep"></div>
+  <input type="text" id="gp-file-filter" class="gp-file-filter" placeholder="Filter files..." oninput="window.__gld.filterFiles(this.value)">
 </div>
 
 <!-- Search overlay -->
@@ -96,6 +104,18 @@ export function buildHtml(options: TemplateOptions): string {
   </div>
 </div>
 
+<!-- Memo panel -->
+<div id="gp-memo-panel" class="gp-memo-panel">
+  <div class="gp-memo-panel-header">
+    <span>Review Memos</span>
+    <div class="gp-memo-panel-actions">
+      <button class="gp-btn" onclick="window.__gld.exportMemos()" title="Copy all memos">Export</button>
+      <button class="gp-btn" onclick="window.__gld.toggleMemoPanel()">&times;</button>
+    </div>
+  </div>
+  <div class="gp-memo-list"></div>
+</div>
+
 <!-- Keyboard hints -->
 <div class="gp-kbd-hint" style="display:none">
   <kbd>j</kbd>/<kbd>k</kbd> files &nbsp;
@@ -106,10 +126,10 @@ export function buildHtml(options: TemplateOptions): string {
 </div>
 
 <!-- Embedded diff data for live re-rendering -->
-<script type="application/json" id="gp-diff-data">${embeddedData}</script>
+<script type="application/json" id="gp-diff-data">${safeJson(embeddedData)}</script>
 
 <!-- Embedded file sources for context expansion -->
-<script type="application/json" id="gp-file-sources">${JSON.stringify(options.fileContents || {})}</script>
+<script type="application/json" id="gp-file-sources">${safeJson(JSON.stringify(options.fileContents || {}))}</script>
 
 <!-- Client scripts -->
 <script>${scripts}</script>
@@ -124,4 +144,8 @@ function esc(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function safeJson(json: string): string {
+  return json.replace(/<\//g, '<\\/');
 }

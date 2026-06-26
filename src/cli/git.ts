@@ -1,6 +1,6 @@
 import { execSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 export interface GitInfo {
   repoName: string;
@@ -24,7 +24,7 @@ export function getGitInfo(): GitInfo {
   }
 
   const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
-  const repoName = repoRoot.split('/').pop() || '';
+  const repoName = basename(repoRoot);
 
   let branch: string;
   try {
@@ -45,17 +45,25 @@ export function getGitDiff(options: DiffOptions = {}): string {
     args.push('--cached');
   }
 
-  for (const pattern of ignore) {
-    args.push(`:(exclude)${pattern}`);
-  }
-
   args.push(...refs);
 
+  args.push('--');
+
+  for (const pattern of ignore) {
+    args.push(`:!${pattern}`);
+  }
+
   if (fileFilter) {
-    args.push('--', fileFilter);
+    args.push(fileFilter);
   }
 
   const result = spawnSync('git', args, { encoding: 'utf-8', maxBuffer: 100 * 1024 * 1024 });
+
+  if (result.status !== 0 && result.status !== 1) {
+    const msg = (result.stderr || '').trim();
+    throw new Error(`git diff failed (exit ${result.status}): ${msg}`);
+  }
+
   let output = result.stdout || '';
 
   // If no diff found and no explicit refs, try HEAD
@@ -102,8 +110,10 @@ export function getNewFileContents(
       }
     } catch {
       try {
-        const content = execSync(`git show HEAD:${path}`, { encoding: 'utf-8', maxBuffer: MAX_FILE_SIZE });
-        result[path] = content.split('\n');
+        const r = spawnSync('git', ['show', `HEAD:${path}`], { encoding: 'utf-8', maxBuffer: MAX_FILE_SIZE });
+        if (r.status === 0 && r.stdout) {
+          result[path] = r.stdout.split('\n');
+        }
       } catch {
         // Skip
       }

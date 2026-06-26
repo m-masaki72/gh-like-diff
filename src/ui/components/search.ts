@@ -97,7 +97,7 @@ export function getSearchScript(): string {
   }
 
   function escapeRegex(s) {
-    return s.replace(new RegExp('[.*+?^$' + String.fromCharCode(123,125) + '()|[\\\\]\\\\\\\\]', 'g'), '\\\\$&');
+    return s.replace(new RegExp('[.*+?^$' + String.fromCharCode(123,125) + '()|\\\\[\\\\]\\\\\\\\]', 'g'), '\\\\$&');
   }
 
   var debounceTimer;

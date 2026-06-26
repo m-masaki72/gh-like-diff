@@ -19,6 +19,9 @@ export interface GhLikeDiffOptions {
  * Parse a unified diff string into structured data.
  */
 export function parse(diffString: string): ParsedDiff {
+  if (typeof diffString !== 'string') {
+    throw new Error('diffString must be a string');
+  }
   return parseDiff(diffString);
 }
 
@@ -26,6 +29,9 @@ export function parse(diffString: string): ParsedDiff {
  * Generate a complete, self-contained HTML page from a diff string.
  */
 export function generate(diffString: string, options: GhLikeDiffOptions = {}): string {
+  if (typeof diffString !== 'string') {
+    throw new Error('diffString must be a string');
+  }
   const parsed = parseDiff(diffString);
 
   return buildHtml({

@@ -1,11 +1,12 @@
 import { parseArgs } from '../src/cli/args.js';
-import { getGitInfo, getGitDiff, getDiffStats, getNewFileContents } from '../src/cli/git.js';
+import { getGitInfo, getGitDiff, getNewFileContents } from '../src/cli/git.js';
 import { resolveOutputPath, writeOutput, openInBrowser, printSummary } from '../src/cli/output.js';
 import { parse } from '../src/core/parser.js';
 import { buildHtml } from '../src/core/template.js';
 import { renderDiff } from '../src/core/renderer.js';
 
 function main() {
+  try {
   const options = parseArgs(process.argv);
   const gitInfo = getGitInfo();
 
@@ -35,7 +36,6 @@ function main() {
 
   // Parse
   const parsed = parse(diff);
-  const stats = getDiffStats(diff);
 
   // JSON output mode
   if (options.json) {
@@ -75,9 +75,9 @@ function main() {
   printSummary({
     repoName: gitInfo.repoName,
     branch: gitInfo.branch,
-    fileCount: stats.fileCount,
-    additions: stats.additions,
-    deletions: stats.deletions,
+    fileCount: parsed.stats.fileCount,
+    additions: parsed.stats.totalAdditions,
+    deletions: parsed.stats.totalDeletions,
     style: options.style === 'side' ? 'side-by-side' : 'unified',
     outputPath,
   });
@@ -85,6 +85,12 @@ function main() {
   if (!options.noOpen) {
     openInBrowser(outputPath);
     console.log('\x1b[0;32mOpened in browser!\x1b[0m');
+  }
+
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`\x1b[0;31mError: ${msg}\x1b[0m`);
+    process.exit(1);
   }
 }
 
