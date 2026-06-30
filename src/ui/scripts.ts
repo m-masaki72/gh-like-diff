@@ -9,9 +9,13 @@ import { getSplitResizerScript } from './components/split-resizer.js';
 import { getLineHighlightScript } from './components/line-highlight.js';
 import { getLineMemoScript } from './components/line-memo.js';
 import { getReviewProgressScript } from './components/review-progress.js';
+import { getToastScript } from './components/toast.js';
+import { getCommandPaletteScript } from './components/command-palette.js';
+import { getMinimapScript } from './components/minimap.js';
 
 export function getClientScripts(): string {
   return [
+    getToastScript(),
     getToolbarScript(),
     getFileTreeScript(),
     getKeyboardNavScript(),
@@ -23,5 +27,7 @@ export function getClientScripts(): string {
     getLineHighlightScript(),
     getLineMemoScript(),
     getReviewProgressScript(),
+    getCommandPaletteScript(),
+    getMinimapScript(),
   ].join('\n');
 }

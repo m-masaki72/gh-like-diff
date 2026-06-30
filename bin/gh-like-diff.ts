@@ -47,7 +47,7 @@ function main() {
   if (options.embed) {
     const fragment = renderDiff(parsed.files, {
       outputFormat: options.style === 'side' ? 'side-by-side' : 'line-by-line',
-      maxLinesBeforeLazy: 500,
+      embed: true,
     });
     console.log(fragment);
     return;

@@ -5,29 +5,11 @@ export function getSplitResizerScript(): string {
   var STORAGE_KEY = 'gld-split-ratio';
   var MIN_RATIO = 0.15;
   var MAX_RATIO = 0.85;
-  var LN_WIDTH = 50;
-  var styleEl = null;
-
-  function ensureStyleEl() {
-    if (styleEl) return styleEl;
-    styleEl = document.getElementById('gld-split-style');
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = 'gld-split-style';
-      document.head.appendChild(styleEl);
-    }
-    return styleEl;
-  }
 
   function applyRatio(ratio) {
     var clamped = Math.max(MIN_RATIO, Math.min(MAX_RATIO, ratio));
     var pct = (clamped * 100).toFixed(3) + '%';
     document.documentElement.style.setProperty('--gld-split-ratio', pct);
-    var s = ensureStyleEl();
-    s.textContent =
-      '.gp-side-table tr > td:nth-child(2) { width: calc(' + pct + ' - ' + LN_WIDTH + 'px) !important; }' +
-      '.gp-side-table tr > td:nth-child(4) { width: calc(100% - ' + pct + ' - ' + LN_WIDTH + 'px) !important; }' +
-      '.gp-side-divider { left: ' + pct + ' !important; }';
     return clamped;
   }
 
@@ -60,7 +42,7 @@ export function getSplitResizerScript(): string {
   document.addEventListener('mousemove', function(e) {
     if (!dragging || !activeContainer) return;
     var rect = activeContainer.getBoundingClientRect();
-    if (rect.width <= LN_WIDTH * 2) return;
+    if (rect.width <= 100) return;
     var ratio = (e.clientX - rect.left) / rect.width;
     applyRatio(ratio);
   });

@@ -18,8 +18,12 @@ export function getToolbarScript(): string {
 
   window.__gld.switchView = function(mode) {
     document.body.dataset.view = mode === 'side' ? 'side' : 'line';
-    document.getElementById('gp-btn-unified').classList.toggle('active', mode === 'line');
-    document.getElementById('gp-btn-split').classList.toggle('active', mode === 'side');
+    var unified = document.getElementById('gp-btn-unified');
+    var split = document.getElementById('gp-btn-split');
+    unified.classList.toggle('active', mode === 'line');
+    split.classList.toggle('active', mode === 'side');
+    unified.setAttribute('aria-pressed', mode === 'line' ? 'true' : 'false');
+    split.setAttribute('aria-pressed', mode === 'side' ? 'true' : 'false');
   };
 
   function showCopiedFeedback(btn) {
@@ -40,6 +44,7 @@ export function getToolbarScript(): string {
     if (!text) return;
     navigator.clipboard.writeText(text).then(function() {
       showCopiedFeedback(btn);
+      window.__gld.toast('Path copied', { type: 'success', duration: 2000 });
     }).catch(function() {});
   };
 
@@ -57,7 +62,7 @@ export function getToolbarScript(): string {
         if (prefix) {
           text = text.substring(prefix.textContent.length);
         }
-        if (!row.classList.contains('gp-del')) {
+        if (!row.classList.contains('gp-del') && !lastCode.classList.contains('gp-empty-line')) {
           lines.push(text);
         }
       }
@@ -65,6 +70,7 @@ export function getToolbarScript(): string {
     }
     navigator.clipboard.writeText(lines.join('\\n')).then(function() {
       showCopiedFeedback(btn);
+      window.__gld.toast('Hunk copied', { type: 'success', duration: 2000 });
     }).catch(function() {});
   };
 

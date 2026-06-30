@@ -1,14 +1,16 @@
 import type { DiffFile, DiffBlock, DiffLine } from 'diff2html/lib/types';
 import { LineType } from 'diff2html/lib/types';
+import { detectLanguage, highlightLine } from './highlighter.js';
 
 export interface RenderOptions {
   outputFormat: 'side-by-side' | 'line-by-line';
   maxLinesBeforeLazy: number;
+  embed?: boolean;
 }
 
 const DEFAULT_OPTIONS: RenderOptions = {
   outputFormat: 'side-by-side',
-  maxLinesBeforeLazy: 500,
+  maxLinesBeforeLazy: Infinity,
 };
 
 function esc(text: string): string {
@@ -147,8 +149,8 @@ function renderHunkCopyBtn(): string {
 
 // --- Line-by-line (Unified) ---
 
-function renderUnifiedLine(line: DiffLine, fileIndex: number, wordDiffHtml?: string): string {
-  const content = wordDiffHtml ?? esc(line.content.slice(1));
+function renderUnifiedLine(line: DiffLine, fileIndex: number, wordDiffHtml?: string, hlContent?: string): string {
+  const content = wordDiffHtml ?? hlContent ?? esc(line.content.slice(1));
   const fi = `data-file-idx="${fileIndex}"`;
   switch (line.type) {
     case LineType.INSERT:
@@ -162,6 +164,12 @@ function renderUnifiedLine(line: DiffLine, fileIndex: number, wordDiffHtml?: str
   }
 }
 
+function hlLine(line: DiffLine, lang: string | null): string | undefined {
+  if (!lang) return undefined;
+  const result = highlightLine(line.content.slice(1), lang);
+  return result || undefined;
+}
+
 function renderUnifiedFile(file: DiffFile, fileIndex: number, lazy: boolean): string {
   if (lazy) {
     return `<div class="gp-lazy-placeholder" data-file-index="${fileIndex}" onclick="window.__gld.loadFile(${fileIndex})">Large file (${totalChangedLines(file)} changes) - click to load</div>`;
@@ -169,6 +177,7 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, lazy: boolean): st
   let rows = '';
   const blocks = file.blocks;
   let gapIdx = 0;
+  const lang = detectLanguage(file.newName || file.oldName || '');
 
   for (let bi = 0; bi < blocks.length; bi++) {
     const block = blocks[bi];
@@ -207,13 +216,13 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, lazy: boolean): st
           wds.push(computeWordDiff(dels[j].content.slice(1), ins[j].content.slice(1)));
         }
         for (let j = 0; j < dels.length; j++) {
-          rows += renderUnifiedLine(dels[j], fileIndex, j < pairCount ? wds[j].oldHtml : undefined);
+          rows += renderUnifiedLine(dels[j], fileIndex, j < pairCount ? wds[j].oldHtml : undefined, j >= pairCount ? hlLine(dels[j], lang) : undefined);
         }
         for (let j = 0; j < ins.length; j++) {
-          rows += renderUnifiedLine(ins[j], fileIndex, j < pairCount ? wds[j].newHtml : undefined);
+          rows += renderUnifiedLine(ins[j], fileIndex, j < pairCount ? wds[j].newHtml : undefined, j >= pairCount ? hlLine(ins[j], lang) : undefined);
         }
       } else {
-        rows += renderUnifiedLine(blines[li], fileIndex);
+        rows += renderUnifiedLine(blines[li], fileIndex, undefined, hlLine(blines[li], lang));
         li++;
       }
     }
@@ -265,24 +274,24 @@ function pairLines(block: DiffBlock): SidePair[] {
   return pairs;
 }
 
-function renderSideCellWithClass(line: DiffLine | null, side: 'left' | 'right', cls: string, fileIndex: number, wordDiffHtml?: string): string {
+function renderSideCellWithClass(line: DiffLine | null, side: 'left' | 'right', cls: string, fileIndex: number, wordDiffHtml?: string, hlContent?: string): string {
   if (line === null) {
     return `<td class="gp-ln"></td><td class="gp-code gp-empty-line"></td>`;
   }
 
-  const content = wordDiffHtml ?? esc(line.content.slice(1));
+  const content = wordDiffHtml ?? hlContent ?? esc(line.content.slice(1));
   const ds = side === 'left' ? 'L' : 'R';
   const fi = `data-file-idx="${fileIndex}"`;
 
   if (line.type === LineType.CONTEXT) {
     const num = side === 'left' ? (line.oldNumber ?? '') : (line.newNumber ?? '');
-    return `<td class="gp-ln${cls}" ${fi} data-ln="${num}" data-side="${ds}">${num}</td><td class="gp-code${cls}">${content}</td>`;
+    return `<td class="gp-ln${cls}" ${fi} data-ln="${num}" data-side="${ds}">${num}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}</div></td>`;
   }
   if (line.type === LineType.DELETE && side === 'left') {
-    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code${cls}">${content}</td>`;
+    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}</div></td>`;
   }
   if (line.type === LineType.INSERT && side === 'right') {
-    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-code${cls}">${content}</td>`;
+    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}</div></td>`;
   }
   return `<td class="gp-ln"></td><td class="gp-code gp-empty-line"></td>`;
 }
@@ -295,6 +304,7 @@ function renderSideFile(file: DiffFile, fileIndex: number, lazy: boolean): strin
   let rows = '';
   const blocks = file.blocks;
   let gapIdx = 0;
+  const lang = detectLanguage(file.newName || file.oldName || '');
 
   for (let bi = 0; bi < blocks.length; bi++) {
     const block = blocks[bi];
@@ -330,13 +340,18 @@ function renderSideFile(file: DiffFile, fileIndex: number, lazy: boolean): strin
 
       let leftWordHtml: string | undefined;
       let rightWordHtml: string | undefined;
+      let leftHl: string | undefined;
+      let rightHl: string | undefined;
       if (pair.left && pair.right && pair.left.type === LineType.DELETE && pair.right.type === LineType.INSERT) {
         const wd = computeWordDiff(pair.left.content.slice(1), pair.right.content.slice(1));
         leftWordHtml = wd.oldHtml;
         rightWordHtml = wd.newHtml;
+      } else {
+        if (pair.left) leftHl = hlLine(pair.left, lang);
+        if (pair.right) rightHl = hlLine(pair.right, lang);
       }
 
-      rows += `<tr${rowCls}>${renderSideCellWithClass(pair.left, 'left', leftLnCls, fileIndex, leftWordHtml)}${renderSideCellWithClass(pair.right, 'right', rightLnCls, fileIndex, rightWordHtml)}</tr>`;
+      rows += `<tr${rowCls}>${renderSideCellWithClass(pair.left, 'left', leftLnCls, fileIndex, leftWordHtml, leftHl)}${renderSideCellWithClass(pair.right, 'right', rightLnCls, fileIndex, rightWordHtml, rightHl)}</tr>`;
     }
   }
 
@@ -358,8 +373,9 @@ function renderFileCard(file: DiffFile, fileIndex: number, options: RenderOption
   const lazy = totalChangedLines(file) > options.maxLinesBeforeLazy;
   const fHash = fileHash(file);
 
-  const sideContent = renderSideFile(file, fileIndex, lazy);
-  const unifiedContent = renderUnifiedFile(file, fileIndex, lazy);
+  const isSide = options.outputFormat === 'side-by-side';
+  const sideContent = options.embed && !isSide ? '' : renderSideFile(file, fileIndex, lazy);
+  const unifiedContent = options.embed && isSide ? '' : renderUnifiedFile(file, fileIndex, lazy);
 
   return `
 <div class="gp-file" id="gp-file-${fileIndex}" data-file-index="${fileIndex}" data-file-hash="${fHash}">
@@ -394,40 +410,82 @@ function renderFileCard(file: DiffFile, fileIndex: number, options: RenderOption
 
 // --- Sidebar ---
 
-export function renderSidebar(files: DiffFile[]): string {
-  const maxChanges = Math.max(1, ...files.map(f => f.addedLines + f.deletedLines));
-  let items = '';
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const tag = fileTag(file);
-    const dir = fileDir(file);
-    const short = fileShortName(file);
-    const maxBar = 5;
-    const total = file.addedLines + file.deletedLines || 1;
-    const addW = Math.max(1, Math.round((file.addedLines / total) * maxBar));
-    const delW = Math.max(1, Math.round((file.deletedLines / total) * maxBar));
-    const heat = Math.round((total / maxChanges) * 100);
-    const heatStyle = heat > 10 ? ` style="border-left-color: rgba(209,36,47,${Math.min(heat / 100, 0.7).toFixed(2)})"` : '';
+interface TreeNode {
+  files: { file: DiffFile; index: number }[];
+  dirs: Map<string, TreeNode>;
+}
 
-    items += `
-<a class="gp-file-item" href="#gp-file-${i}" data-file-index="${i}" onclick="window.__gld.navFile(${i}); return false;"${heatStyle}>
+function buildTree(files: DiffFile[]): TreeNode {
+  const root: TreeNode = { files: [], dirs: new Map() };
+  for (let i = 0; i < files.length; i++) {
+    const name = files[i].newName || files[i].oldName || 'unknown';
+    const parts = name.split('/');
+    const fileName = parts.pop()!;
+    let node = root;
+    for (const part of parts) {
+      if (!node.dirs.has(part)) node.dirs.set(part, { files: [], dirs: new Map() });
+      node = node.dirs.get(part)!;
+    }
+    node.files.push({ file: { ...files[i], newName: fileName, oldName: fileName }, index: i });
+  }
+  return root;
+}
+
+function renderTreeNode(node: TreeNode, maxChanges: number, depth: number, files: DiffFile[]): string {
+  let html = '';
+  const sorted = Array.from(node.dirs.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [dirName, child] of sorted) {
+    const pad = depth * 12;
+    html += `<div class="gp-tree-dir" style="padding-left:${pad}px">
+  <button class="gp-tree-toggle" onclick="this.parentElement.classList.toggle('collapsed')">
+    <svg class="gp-tree-chevron" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L10.19 8 6.22 4.03a.75.75 0 0 1 0-1.06Z"/></svg>
+    <svg class="gp-tree-folder" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M.513 1.513A1.75 1.75 0 0 1 1.75 1h3.5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.5A1.75 1.75 0 0 1 16 4.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75c0-.464.184-.91.513-1.237Z"/></svg>
+    <span class="gp-tree-dir-name">${esc(dirName)}</span>
+  </button>
+</div>`;
+    html += `<div class="gp-tree-children">`;
+    html += renderTreeNode(child, maxChanges, depth + 1, files);
+    html += `</div>`;
+  }
+
+  for (const { file, index } of node.files) {
+    const orig = files[index];
+    const tag = fileTag(orig);
+    const short = file.newName || file.oldName || 'unknown';
+    const maxBar = 5;
+    const total = orig.addedLines + orig.deletedLines || 1;
+    const addW = Math.max(1, Math.round((orig.addedLines / total) * maxBar));
+    const delW = Math.max(1, Math.round((orig.deletedLines / total) * maxBar));
+    const heat = Math.round((total / Math.max(maxChanges, 1)) * 100);
+    const heatStyle = heat > 10 ? ` style="border-left-color: rgba(209,36,47,${Math.min(heat / 100, 0.7).toFixed(2)})"` : '';
+    const pad = depth * 12;
+
+    html += `
+<a class="gp-file-item" href="#gp-file-${index}" data-file-index="${index}" onclick="window.__gld.navFile(${index}); return false;"${heatStyle} style="padding-left:${14 + pad}px">
   <span class="gp-file-icon ${tag.cls}">${tag.label[0]}</span>
-  <span class="gp-file-name"><span class="gp-file-dir">${esc(dir)}</span>${esc(short)}</span>
+  <span class="gp-file-name">${esc(short)}</span>
   <span class="gp-file-bar">
-    ${file.addedLines > 0 ? `<span class="gp-file-bar-add" style="width:${addW}px"></span>` : ''}
-    ${file.deletedLines > 0 ? `<span class="gp-file-bar-del" style="width:${delW}px"></span>` : ''}
+    ${orig.addedLines > 0 ? `<span class="gp-file-bar-add" style="width:${addW}px"></span>` : ''}
+    ${orig.deletedLines > 0 ? `<span class="gp-file-bar-del" style="width:${delW}px"></span>` : ''}
   </span>
 </a>`;
   }
+  return html;
+}
+
+export function renderSidebar(files: DiffFile[]): string {
+  const maxChanges = Math.max(1, ...files.map(f => f.addedLines + f.deletedLines));
+  const tree = buildTree(files);
+  const items = renderTreeNode(tree, maxChanges, 0, files);
 
   return `
-<div class="gp-sidebar" id="gp-sidebar">
+<nav class="gp-sidebar" id="gp-sidebar" role="navigation" aria-label="File tree">
   <div class="gp-sidebar-header">
     <span>Files (${files.length})</span>
-    <button class="gp-collapse-btn" onclick="window.__gld.toggleSidebar()">Hide</button>
+    <button class="gp-collapse-btn" onclick="window.__gld.toggleSidebar()" aria-label="Hide sidebar">Hide</button>
   </div>
   ${items}
-</div>`;
+</nav>`;
 }
 
 // --- Main export ---

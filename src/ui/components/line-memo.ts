@@ -209,7 +209,9 @@ export function getLineMemoScript(): string {
       var fileName = fileEl ? (fileEl.querySelector('.gp-file-header-name') || {}).textContent || 'File ' + parts[0] : 'File ' + parts[0];
       return '[' + fileName + ' ' + parts[1] + parts[2] + '] ' + memos[id];
     }).join('\\n\\n');
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(text).then(function() {
+      window.__gld.toast(keys.length + ' memo(s) copied', { type: 'success', duration: 2000 });
+    });
   };
 
   if (document.readyState === 'loading') {

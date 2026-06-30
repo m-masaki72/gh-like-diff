@@ -71,6 +71,7 @@ export function getReviewProgressScript(): string {
       var files = document.querySelectorAll('.gp-file');
       var scrollTop = window.scrollY + 100;
       for (var i = files.length - 1; i >= 0; i--) {
+        if (files[i].style.display === 'none' || files[i].offsetParent === null) continue;
         if (files[i].getBoundingClientRect().top + window.scrollY <= scrollTop) {
           var cb = files[i].querySelector('.gp-reviewed-cb');
           if (cb) {
