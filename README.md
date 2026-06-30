@@ -29,6 +29,18 @@ Each file has a "Viewed" checkbox. A progress bar in the toolbar shows `3/12 fil
 ### Hunk Copy & File Filter
 Copy a hunk's code (additions + context) to clipboard with one click. Filter files by name with the toolbar search box — both the diff cards and sidebar update in real time.
 
+### Syntax Highlighting
+Server-side syntax highlighting via highlight.js — only the CSS theme ships in the output HTML, not the highlight.js library itself. Supports 20+ languages (TypeScript, Python, Go, Rust, Java, C/C++, Ruby, PHP, Swift, Kotlin, and more). Word-diff lines skip syntax coloring to avoid HTML nesting conflicts.
+
+### Command Palette
+Press `Cmd+K` (or `Ctrl+K`) to open a command palette with fuzzy search across files and built-in actions (view switching, theme toggle, search, export). Navigate with arrow keys, press Enter to execute.
+
+### Toast Notifications
+Non-intrusive feedback for clipboard operations — copy a file path or hunk code and see a slide-up confirmation toast that auto-dismisses.
+
+### Minimap
+A canvas-based diff overview on the right edge, showing addition (green), deletion (red), and hunk (blue) markers. Click or drag to jump to any position. Toggle with the toolbar button.
+
 ### Keyboard-First Navigation
 Designed for developers who live in the terminal:
 
@@ -39,13 +51,14 @@ Designed for developers who live in the terminal:
 | `r` | Toggle "Viewed" for current file |
 | `/` | Open search overlay |
 | `b` | Toggle sidebar |
+| `Cmd+K` | Command palette |
 | `?` | Toggle keyboard shortcuts |
 | `Escape` | Close overlays |
 
 ### File Tree Sidebar
-A collapsible sidebar lists all changed files with:
+A collapsible sidebar lists all changed files in a directory tree with:
+- Collapsible directory nodes with folder icons
 - File status icons (Added / Modified / Deleted / Renamed)
-- Directory path grouping
 - Per-file addition/deletion bar chart
 - Click-to-jump navigation
 - Active file tracking on scroll
@@ -56,14 +69,14 @@ Press `/` to open a search overlay that highlights matches across the entire dif
 ### Context Expansion
 GitHub-style expand buttons on gap rows: ▲ (show lines above), ▼ (show lines below), and ↕ (show all hidden lines). Expands 20 lines per click, with full line-highlight and memo support on expanded rows.
 
+### Accessibility
+Semantic HTML with full ARIA support: `role` attributes on toolbar, main content, sidebar, and search overlay. Skip-to-content link, `aria-pressed` on toggle buttons, `aria-live` regions for dynamic content, and `progressbar` role on review progress.
+
 ### Print-Optimized
-`@media print` rules hide all interactive chrome (toolbar, sidebar, buttons) and optimize the diff layout for paper. Print directly from the browser for code review meetings.
+`@media print` rules hide all interactive chrome (toolbar, sidebar, minimap, buttons) and optimize the diff layout for paper. Print directly from the browser for code review meetings.
 
 ### Sidebar Change Heatmap
 The sidebar uses a color-coded left border to visualize change intensity — files with more additions/deletions appear with a stronger red accent, making hotspots immediately visible.
-
-### Large Diff Performance
-Files with 500+ changed lines are lazy-loaded — rendered only when you click "Load diff". This keeps memory flat and the browser responsive, even on diffs with thousands of files (a common pain point in Unity projects with `.meta` files).
 
 ### Self-Contained HTML Output
 The generated HTML file includes all CSS and JavaScript inlined — zero external dependencies, zero network requests. Open it from `file://`, share it on Slack, archive it as a build artifact. It just works, months later, on any machine.
@@ -213,6 +226,7 @@ gh-like-diff/
 │   │   ├── git.ts                  # Git operations (diff, repo info)
 │   │   └── output.ts              # File writing, browser launch, terminal output
 │   ├── core/
+│   │   ├── highlighter.ts         # Server-side syntax highlighting (highlight.js)
 │   │   ├── parser.ts              # diff2html parse wrapper + metadata
 │   │   ├── renderer.ts            # Custom HTML renderer (side-by-side + unified)
 │   │   └── template.ts            # Full-page HTML assembly (CSS/JS inline)
@@ -220,30 +234,36 @@ gh-like-diff/
 │       ├── styles.ts              # GitHub-style CSS (light/dark, all components)
 │       ├── scripts.ts             # Client JS aggregator
 │       └── components/
+│           ├── command-palette.ts # Cmd+K command palette with fuzzy search
 │           ├── context-expand.ts  # ▲/▼/↕ context expansion
 │           ├── file-tree.ts       # Sidebar toggle
 │           ├── keyboard-nav.ts    # j/k/n/p/r navigation + scroll tracking
 │           ├── line-highlight.ts  # Click-to-highlight + URL hash + range select
 │           ├── line-memo.ts       # Inline review memos (localStorage)
+│           ├── minimap.ts         # Canvas-based diff overview + navigation
 │           ├── review-progress.ts # Per-file "Viewed" checkboxes + progress bar
 │           ├── search.ts          # In-page search with highlight
 │           ├── split-resizer.ts   # Drag-to-resize split view divider
 │           ├── theme-toggle.ts    # Light/dark/auto switching
+│           ├── toast.ts           # Toast notification system
 │           ├── toolbar.ts         # View switching, file collapse, hunk copy, filter
 │           └── virtual-scroll.ts  # Lazy loading for large files
 ├── tests/
-│   ├── unit/                       # Vitest unit tests (31 tests)
+│   ├── unit/                       # Vitest unit tests (64 tests)
+│   │   ├── highlighter.test.ts
 │   │   ├── parser.test.ts
 │   │   ├── renderer.test.ts
 │   │   └── template.test.ts
-│   └── e2e/                        # Playwright E2E tests (26 tests)
+│   └── e2e/                        # Playwright E2E tests (54 tests)
 │       ├── fixtures/generate-diff.ts
+│       ├── accessibility.spec.ts
+│       ├── context-expand.spec.ts
+│       ├── file-collapse.spec.ts
+│       ├── hunk-copy.spec.ts
 │       ├── line-highlight.spec.ts
 │       ├── line-memo.spec.ts
-│       ├── file-collapse.spec.ts
-│       ├── context-expand.spec.ts
-│       ├── review-progress.spec.ts
-│       └── hunk-copy.spec.ts
+│       ├── new-features.spec.ts
+│       └── review-progress.spec.ts
 ├── package.json
 ├── tsconfig.json
 ├── tsup.config.ts                  # Build config (CJS + ESM + DTS)
@@ -265,9 +285,10 @@ gh-like-diff/
 - **TypeScript** — All source code
 - **tsup** (esbuild) — Build pipeline producing CJS, ESM, and DTS outputs
 - **diff2html** — Unified diff parsing engine
+- **highlight.js** — Server-side syntax highlighting (CSS theme only in output)
 - **commander** — CLI argument parsing
-- **vitest** — Unit test framework (31 tests)
-- **Playwright** — E2E browser test framework (26 tests)
+- **vitest** — Unit test framework (64 tests)
+- **Playwright** — E2E browser test framework (54 tests)
 
 ### Build Output
 
@@ -311,7 +332,9 @@ Key findings across 15+ sources identified **10 critical pain points** in local 
 
 **Phase 5: Documentation** — This README.
 
-**Phase 6: GitHub互換 + 独自機能** — GitHubのdiff UIとのクリック挙動の差異を修正し、行ハイライト・範囲選択・URLハッシュ連動を実装。加えてオフライン・自己完結型の特性を活かした独自機能（インラインメモ、レビュー進捗トラッカー、ハンクコピー）を追加。Vitest + Playwright によるテストスイート（57テスト）も整備。多角的なコードレビューで12件のバグ修正・セキュリティ改善を実施。
+**Phase 6: GitHub互換 + 独自機能** — GitHubのdiff UIとのクリック挙動の差異を修正し、行ハイライト・範囲選択・URLハッシュ連動を実装。加えてオフライン・自己完結型の特性を活かした独自機能（インラインメモ、レビュー進捗トラッカー、ハンクコピー）を追加。Vitest + Playwright によるテストスイート整備。多角的なコードレビューで12件のバグ修正・セキュリティ改善を実施。
+
+**Phase 7: モダンUX + 発展機能** — サーバーサイドシンタックスハイライト（highlight.js、CSSテーマのみ出力）、Cmd+Kコマンドパレット、トースト通知、Canvas minimap、ディレクトリツリーサイドバー、アクセシビリティ全面対応（ARIA roles/labels、semantic HTML、スキップリンク）を実装。side-by-side独立スクロール、embedモード最適化、split-resizerパフォーマンス改善などのバグ修正も実施。テストスイートを118テスト（ユニット64 + E2E 54）に拡充。
 
 ### What the AI Did Well
 - Parallel research across many sources to identify real user pain points
@@ -327,48 +350,9 @@ Key findings across 15+ sources identified **10 critical pain points** in local 
 
 ---
 
-## Known Issues & Near-Term TODO
+## Status & Roadmap
 
-### Must Fix (v1.0 patch)
-
-- [ ] **ライブビュー切替の再レンダー未実装** — Unified ↔ Split ボタンはUI上存在するが、クライアント側で切替時のDOM再描画が行われない。埋め込みJSONデータの更新のみ対応済み
-- [ ] **バイナリファイル・空ファイルの表示** — バイナリファイルや空diffが含まれる場合のフォールバック表示がない
-- [ ] **遅延読み込み未接続** — `virtual-scroll.ts` が `window.__gld.renderFile` を呼ぶが未定義。大量ファイルのdiffで遅延レンダーが機能しない
-
-### Should Fix (v1.0.x)
-
-- [ ] **シンタックスハイライト** — 現在はモノクロのコード表示。highlight.js または Shiki の統合
-- [ ] **`.gh-like-diffrc` 設定ファイル** — デフォルト設定の読み込み
-- [ ] **GitHub Actions CI** — ビルド・テスト自動化、npm publish ワークフロー
-- [ ] **npm publish 準備** — npm上の名前空間確認、CHANGELOG.md の作成
-- [ ] **stdin/パイプ入力** — `git diff | gh-like-diff` のようなパイプ入力に未対応
-- [ ] **ARIA属性** — スクリーンリーダー対応、キーボードショートカットとの競合回避
-
-### Nice to Have (v1.1)
-
-- [ ] **ワード単位のdiffハイライト改善** — diff2htmlの `diffStyle: 'word'` を活用した変更箇所のインラインハイライト
-- [ ] **同期スクロールの改善** — side-by-side表示で行数不一致時のずれ対応
-- [ ] **リネームファイルの移動検出表示** — リネーム元/先の見やすいレイアウト
-- [ ] **examplesディレクトリ** — 使用例のサンプルHTML生成スクリプト
-- [ ] **ダークモードCSS統合** — 重複したダークモードスタイル (~1.5KB) の統合
-- [ ] **SVGアイコン統合** — インラインで重複しているSVGアイコンの共通化
-
----
-
-## Roadmap
-
-### v1.5 — "The Collaborative Diff"
-- **Comment import/export** — `gh-like-diff comments export review.html > comments.json`
-- **Annotation mode** — Mark lines as "reviewed", "needs discussion", or "approved"（基本的なレビュー進捗は実装済み）
-- **Interdiff** — `gh-like-diff interdiff v1.html v2.html` to compare two saved diffs
-- **Plugin system** — `--plugin ./my-plugin.js` for custom toolbar buttons and rendering
-
-### v2.0 — "The Smart Diff"
-- **Function-level navigation** — tree-sitter WASM extracts function/class names; "symbols changed" summary
-- **Image diff** — Side-by-side, onion-skin, and swipe comparison for PNG/JPG/SVG
-- **AI review integration** — `--ai-review` embeds LLM suggestions as comments (BYOK)
-- **Interactive staging** — `gh-like-diff stage` for a visual `git add -p` replacement
-- **Syntax-aware folding** — Collapse unchanged functions, show only what changed
+See [PROGRESS.md](PROGRESS.md) for known issues, TODO items, roadmap, and license compliance details.
 
 ---
 
@@ -377,16 +361,16 @@ Key findings across 15+ sources identified **10 critical pain points** in local 
 Contributions are welcome! Areas that would benefit most:
 
 - **CI/CD** — GitHub Actions for build, test, and npm publish
-- **Syntax highlighting** — Integrate highlight.js or Shiki for code coloring
-- **Accessibility** — ARIA labels, screen reader support, focus management
 - **Live view switching** — Client-side re-render when toggling unified ↔ split view
 - **stdin support** — Accept piped diff input from other commands
+- **Image diff** — Side-by-side comparison for PNG/JPG/SVG changes
 
 ```bash
 # Development
 npm run build          # Build with tsup
-npm run test           # Run vitest unit tests (31 tests)
-npm run test:e2e       # Run Playwright E2E tests (26 tests)
+npm run test           # Run vitest unit tests (64 tests)
+npm run test:e2e       # Run Playwright E2E tests (54 tests)
+npm run typecheck      # TypeScript type checking
 ```
 
 ---

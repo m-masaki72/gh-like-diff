@@ -1,5 +1,9 @@
 node_modules/
 dist/
 *.log
+*.tsbuildinfo
 .env
 .DS_Store
+test-results/
+coverage/
+.playwright/
