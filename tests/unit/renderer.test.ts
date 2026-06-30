@@ -140,6 +140,69 @@ describe('renderDiff', () => {
     const html = renderDiff([file], { outputFormat: 'side-by-side', maxLinesBeforeLazy: 500 });
     expect(html).toContain('gp-lazy-placeholder');
   });
+
+  it('applies syntax highlighting to .ts files', () => {
+    const file = makeMockFile({
+      newName: 'src/utils.ts',
+      oldName: 'src/utils.ts',
+      blocks: [{
+        lines: [
+          { type: LineType.CONTEXT, content: ' const x = 42;', oldNumber: 1, newNumber: 1 },
+        ],
+        oldStartLine: 1,
+        oldStartLine2: null,
+        newStartLine: 1,
+        header: '@@ -1,1 +1,1 @@',
+      }],
+    });
+    const html = renderDiff([file], { outputFormat: 'line-by-line' });
+    expect(html).toContain('hljs-');
+  });
+
+  it('does not apply highlighting to unknown file types', () => {
+    const file = makeMockFile({
+      newName: 'data.xyz',
+      oldName: 'data.xyz',
+      blocks: [{
+        lines: [
+          { type: LineType.CONTEXT, content: ' some data', oldNumber: 1, newNumber: 1 },
+        ],
+        oldStartLine: 1,
+        oldStartLine2: null,
+        newStartLine: 1,
+        header: '@@ -1,1 +1,1 @@',
+      }],
+    });
+    const html = renderDiff([file], { outputFormat: 'line-by-line' });
+    expect(html).not.toContain('hljs-');
+  });
+
+  it('renders only unified view when embed is true and format is line-by-line', () => {
+    const file = makeMockFile();
+    const html = renderDiff([file], { outputFormat: 'line-by-line', embed: true });
+    expect(html).toContain('gp-unified-wrapper');
+    expect(html).not.toContain('gp-side-table');
+  });
+
+  it('renders only side-by-side view when embed is true and format is side-by-side', () => {
+    const file = makeMockFile();
+    const html = renderDiff([file], { outputFormat: 'side-by-side', embed: true });
+    expect(html).toContain('gp-side-table');
+    expect(html).not.toContain('gp-unified-wrapper');
+  });
+
+  it('renders both views when embed is false', () => {
+    const file = makeMockFile();
+    const html = renderDiff([file], { outputFormat: 'side-by-side' });
+    expect(html).toContain('gp-side-table');
+    expect(html).toContain('gp-unified-wrapper');
+  });
+
+  it('side-by-side cells have gp-code-inner wrapper', () => {
+    const file = makeMockFile();
+    const html = renderDiff([file], { outputFormat: 'side-by-side' });
+    expect(html).toContain('gp-code-inner');
+  });
 });
 
 describe('renderSidebar', () => {
@@ -164,5 +227,24 @@ describe('renderSidebar', () => {
     expect(renderSidebar([added])).toContain('class="gp-file-icon added"');
     expect(renderSidebar([deleted])).toContain('class="gp-file-icon deleted"');
     expect(renderSidebar([renamed])).toContain('class="gp-file-icon renamed"');
+  });
+
+  it('renders directory tree structure for nested paths', () => {
+    const files = [
+      makeMockFile({ newName: 'src/core/parser.ts', oldName: 'src/core/parser.ts' }),
+      makeMockFile({ newName: 'src/core/renderer.ts', oldName: 'src/core/renderer.ts' }),
+      makeMockFile({ newName: 'src/ui/styles.ts', oldName: 'src/ui/styles.ts' }),
+    ];
+    const html = renderSidebar(files);
+    expect(html).toContain('gp-tree-dir');
+    expect(html).toContain('gp-tree-toggle');
+    expect(html).toContain('gp-tree-folder');
+  });
+
+  it('uses nav element with aria-label', () => {
+    const file = makeMockFile();
+    const html = renderSidebar([file]);
+    expect(html).toContain('role="navigation"');
+    expect(html).toContain('aria-label="File tree"');
   });
 });
