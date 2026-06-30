@@ -59,7 +59,7 @@ test.describe('Line Highlight (GitHub-compatible)', () => {
 
   test('works in unified view', async ({ page, unifiedDiffPageUrl }) => {
     await page.goto(unifiedDiffPageUrl);
-    const lnCell = page.locator('.gp-ln[data-ln]').first();
+    const lnCell = page.locator('.gp-view-unified .gp-ln[data-ln]').first();
     await lnCell.click();
     const row = lnCell.locator('..');
     await expect(row).toHaveClass(/gp-highlighted/);

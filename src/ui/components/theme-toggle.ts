@@ -21,8 +21,6 @@ export function getThemeToggleScript(): string {
     var btn = document.getElementById('gp-theme-btn');
     if (!btn) return;
     var theme = document.documentElement.getAttribute('data-theme') || 'auto';
-    var labels = { auto: '☀/☾', dark: '☾', light: '☀' };
-    btn.textContent = labels[theme] || labels.auto;
     btn.title = 'Theme: ' + theme;
   }
 

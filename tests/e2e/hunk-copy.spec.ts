@@ -10,7 +10,7 @@ test.describe('Hunk Copy', () => {
 
   test('hunk copy button is visible on hover', async ({ page, unifiedDiffPageUrl }) => {
     await page.goto(unifiedDiffPageUrl);
-    const hunk = page.locator('.gp-hunk').first();
+    const hunk = page.locator('.gp-view-unified .gp-hunk').first();
     await hunk.hover();
     const copyBtn = hunk.locator('.gp-hunk-copy-btn');
     await expect(copyBtn).toBeAttached();
@@ -19,7 +19,7 @@ test.describe('Hunk Copy', () => {
   test('clicking copy button copies hunk code to clipboard', async ({ page, unifiedDiffPageUrl, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto(unifiedDiffPageUrl);
-    const hunk = page.locator('.gp-hunk').first();
+    const hunk = page.locator('.gp-view-unified .gp-hunk').first();
     await hunk.hover();
     const copyBtn = hunk.locator('.gp-hunk-copy-btn');
     await copyBtn.click({ force: true });

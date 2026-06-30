@@ -36,12 +36,13 @@ export function parseArgs(argv: string[]): CliOptions {
 
   const opts = program.opts();
   const refs = program.args;
+  const context = parseInt(opts.context, 10);
 
   return {
     style: opts.style === 'line' ? 'line' : 'side',
     staged: opts.staged,
     file: opts.file,
-    context: Number.isNaN(parseInt(opts.context, 10)) ? 3 : parseInt(opts.context, 10),
+    context: Number.isNaN(context) ? 3 : context,
     save: opts.save,
     noOpen: opts.open === false,
     json: opts.json,

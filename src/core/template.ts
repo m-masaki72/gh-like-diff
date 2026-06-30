@@ -56,7 +56,7 @@ export function buildHtml(options: TemplateOptions): string {
 <title>${esc(title)}</title>
 <style>${css}</style>
 </head>
-<body>
+<body data-view="${viewIsSide ? 'side' : 'line'}">
 
 <!-- Header -->
 <div class="gp-header">
@@ -72,8 +72,8 @@ export function buildHtml(options: TemplateOptions): string {
   <button class="gp-btn${viewIsSide ? '' : ' active'}" id="gp-btn-unified" onclick="window.__gld.switchView('line')">Unified</button>
   <button class="gp-btn${viewIsSide ? ' active' : ''}" id="gp-btn-split" onclick="window.__gld.switchView('side')">Split</button>
   <div class="gp-toolbar-sep"></div>
-  <button class="gp-btn" id="gp-theme-btn" onclick="window.__gld.toggleTheme()" title="Toggle theme">☀/☾</button>
-  <button class="gp-btn" onclick="window.__gld.toggleSidebar()">☰</button>
+  <button class="gp-btn gp-theme-btn" id="gp-theme-btn" onclick="window.__gld.toggleTheme()" title="Toggle theme"><svg class="gp-icon-sun" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM8 0a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0Zm0 13a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 13ZM3 8a.75.75 0 0 1-.75.75H.75a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 3 8Zm13 0a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 16 8Z"/></svg><svg class="gp-icon-moon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M9.598 1.591a.749.749 0 0 1 .785-.175 7.001 7.001 0 1 1-8.967 8.967.75.75 0 0 1 .961-.96 5.5 5.5 0 0 0 7.22-7.832Z"/></svg></button>
+  <button class="gp-btn" onclick="window.__gld.toggleSidebar()" title="Toggle sidebar"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg></button>
   <span class="gp-stats">
     <strong>${stats.fileCount}</strong> file${stats.fileCount !== 1 ? 's' : ''} changed,
     <span class="gp-stats-add">+${stats.totalAdditions}</span>,
@@ -84,7 +84,7 @@ export function buildHtml(options: TemplateOptions): string {
     <div class="gp-review-bar"><div class="gp-review-bar-fill"></div></div>
     <span class="gp-review-count">0/${stats.fileCount}</span>
   </div>
-  <button class="gp-btn" onclick="window.__gld.toggleMemoPanel()" title="Review memos">📝 <span id="gp-memo-count">0</span></button>
+  <button class="gp-btn gp-memo-btn" onclick="window.__gld.toggleMemoPanel()" title="Review memos"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg><span id="gp-memo-count">0</span></button>
   <div class="gp-toolbar-sep"></div>
   <input type="text" id="gp-file-filter" class="gp-file-filter" placeholder="Filter files..." oninput="window.__gld.filterFiles(this.value)">
 </div>

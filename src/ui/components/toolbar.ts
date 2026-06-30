@@ -8,47 +8,38 @@ export function getToolbarScript(): string {
     var file = document.getElementById('gp-file-' + fileIndex);
     if (!body || !file) return;
 
-    var isHidden = body.style.display === 'none';
-    body.style.display = isHidden ? '' : 'none';
+    var isCollapsed = body.classList.contains('collapsed');
+    body.classList.toggle('collapsed');
     var chevron = file.querySelector('.gp-chevron-icon');
     if (chevron) {
-      chevron.style.transform = isHidden ? '' : 'rotate(-90deg)';
+      chevron.style.transform = isCollapsed ? '' : 'rotate(-90deg)';
     }
   };
 
   window.__gld.switchView = function(mode) {
-    var dataEl = document.getElementById('gp-diff-data');
-    if (!dataEl) {
-      // No embedded data, just toggle button state
-      document.getElementById('gp-btn-unified').classList.toggle('active', mode === 'line');
-      document.getElementById('gp-btn-split').classList.toggle('active', mode === 'side');
-      return;
-    }
-
-    try {
-      var data = JSON.parse(dataEl.textContent);
-      data.options.outputFormat = mode === 'side' ? 'side-by-side' : 'line-by-line';
-      dataEl.textContent = JSON.stringify(data);
-    } catch (e) {}
-
+    document.body.dataset.view = mode === 'side' ? 'side' : 'line';
     document.getElementById('gp-btn-unified').classList.toggle('active', mode === 'line');
     document.getElementById('gp-btn-split').classList.toggle('active', mode === 'side');
   };
+
+  function showCopiedFeedback(btn) {
+    var copyIcon = btn.querySelector('.gp-copy-icon');
+    var checkIcon = btn.querySelector('.gp-check-icon');
+    if (copyIcon) copyIcon.style.display = 'none';
+    if (checkIcon) checkIcon.style.display = '';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      if (copyIcon) copyIcon.style.display = '';
+      if (checkIcon) checkIcon.style.display = 'none';
+      btn.classList.remove('copied');
+    }, 2000);
+  }
 
   window.__gld.copyFileName = function(btn) {
     var text = btn.getAttribute('data-clipboard');
     if (!text) return;
     navigator.clipboard.writeText(text).then(function() {
-      var copyIcon = btn.querySelector('.gp-copy-icon');
-      var checkIcon = btn.querySelector('.gp-check-icon');
-      if (copyIcon) copyIcon.style.display = 'none';
-      if (checkIcon) checkIcon.style.display = '';
-      btn.classList.add('copied');
-      setTimeout(function() {
-        if (copyIcon) copyIcon.style.display = '';
-        if (checkIcon) checkIcon.style.display = 'none';
-        btn.classList.remove('copied');
-      }, 2000);
+      showCopiedFeedback(btn);
     }).catch(function() {});
   };
 
@@ -73,14 +64,7 @@ export function getToolbarScript(): string {
       row = row.nextElementSibling;
     }
     navigator.clipboard.writeText(lines.join('\\n')).then(function() {
-      var copyIcon = btn.querySelector('.gp-copy-icon');
-      var checkIcon = btn.querySelector('.gp-check-icon');
-      if (copyIcon) copyIcon.style.display = 'none';
-      if (checkIcon) checkIcon.style.display = '';
-      setTimeout(function() {
-        if (copyIcon) copyIcon.style.display = '';
-        if (checkIcon) checkIcon.style.display = 'none';
-      }, 2000);
+      showCopiedFeedback(btn);
     }).catch(function() {});
   };
 

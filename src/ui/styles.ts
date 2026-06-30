@@ -143,6 +143,7 @@ body {
 }
 .gp-btn:hover { background: var(--gld-canvas-subtle); }
 .gp-btn.active { background: var(--gld-accent); color: #fff; border-color: var(--gld-accent); }
+.gp-memo-btn { display: inline-flex; align-items: center; gap: 4px; }
 
 .gp-stats { font-size: 12px; color: var(--gld-fg-muted); margin-left: auto; }
 .gp-stats-add { color: var(--gld-success); font-weight: 600; }
@@ -169,7 +170,7 @@ body {
   transition: width 0.2s, min-width 0.2s;
   z-index: 50;
 }
-.gp-sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; }
+.gp-sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; border-right: none; }
 
 .gp-sidebar-header {
   padding: 10px 14px;
@@ -383,23 +384,10 @@ body {
 .gp-hunk td { padding: 4px 12px !important; }
 .gp-hunk-text { font-style: italic; }
 
-/* Expand button */
-.gp-expand-btn {
-  font-family: var(--gld-font-sans);
-  font-size: 11px;
-  color: var(--gld-accent);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  margin-left: 8px;
-}
-.gp-expand-btn:hover { text-decoration: underline; }
-
-/* Context expand rows (GitHub-style single row with stacked ▲▼ arrows) */
+/* Context expand rows (GitHub-style single row with stacked arrows) */
 .gp-expand-row { background: var(--gld-hunk-bg); }
 .gp-expand-arrows {
-  padding: 0 !important;
+  padding: 4px 0 !important;
   width: 50px;
   min-width: 50px;
   max-width: 50px;
@@ -409,19 +397,18 @@ body {
   vertical-align: middle;
 }
 .gp-expand-arrow {
-  display: block;
-  font-family: var(--gld-font-mono);
-  font-size: 9px;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--gld-accent);
   background: none;
   border: none;
   cursor: pointer;
-  padding: 1px 0;
+  padding: 2px 0;
   width: 100%;
-  text-align: center;
 }
-.gp-expand-arrow:hover { background: var(--gld-neutral-muted); }
+.gp-expand-arrow svg { pointer-events: none; }
+.gp-expand-arrow:hover { background: var(--gld-neutral-muted); border-radius: 4px; }
 .gp-expand-arrow-all { border-top: 1px solid var(--gld-border-muted); border-bottom: 1px solid var(--gld-border-muted); }
 .gp-expand-row:hover { background: rgba(56, 139, 253, 0.1); }
 .gp-expand-row:hover .gp-expand-arrows { background: rgba(56, 139, 253, 0.08); }
@@ -461,7 +448,6 @@ body {
   width: 100%;
   table-layout: fixed;
 }
-.gp-side-table > colgroup { display: none; }
 .gp-side-table tr > td:nth-child(1),
 .gp-side-table tr > td:nth-child(3) { width: var(--gld-ln-width); }
 .gp-side-table tr > td:nth-child(2) { width: calc(var(--gld-split-ratio) - var(--gld-ln-width)); }
@@ -736,6 +722,45 @@ body.gp-resizing * {
 }
 .gp-file-filter:focus { border-color: var(--gld-accent); box-shadow: 0 0 0 2px rgba(9,105,218,0.3); }
 .gp-file-filter::placeholder { color: var(--gld-fg-subtle); }
+
+/* === View switching === */
+body[data-view="side"] .gp-view-unified { display: none; }
+body[data-view="line"] .gp-view-side { display: none; }
+
+/* === File body collapse animation === */
+.gp-file-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.gp-file-body.collapsed { grid-template-rows: 0fr; }
+.gp-file-body-inner { overflow: hidden; }
+
+/* === Diff dots (change bar) === */
+.gp-diff-dots {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.gp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.gp-dot-add { background: var(--gld-success); }
+.gp-dot-del { background: var(--gld-danger); }
+
+/* === Theme button icons === */
+.gp-theme-btn { display: inline-flex; align-items: center; justify-content: center; }
+.gp-theme-btn .gp-icon-moon { display: none; }
+[data-theme="dark"] .gp-theme-btn .gp-icon-sun { display: none; }
+[data-theme="dark"] .gp-theme-btn .gp-icon-moon { display: inline; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gp-theme-btn .gp-icon-sun { display: none; }
+  :root:not([data-theme="light"]) .gp-theme-btn .gp-icon-moon { display: inline; }
+}
 
 /* === Responsive === */
 @media (max-width: 900px) {

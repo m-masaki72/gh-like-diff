@@ -12,7 +12,7 @@ test.describe('Context Expand', () => {
 
   test('expand row hover effect applies', async ({ page, unifiedDiffPageUrl }) => {
     await page.goto(unifiedDiffPageUrl);
-    const expandRow = page.locator('.gp-expand-row').first();
+    const expandRow = page.locator('.gp-view-unified .gp-expand-row').first();
     if (await expandRow.count() > 0) {
       await expandRow.hover();
       await expect(expandRow).toBeVisible();

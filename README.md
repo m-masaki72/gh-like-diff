@@ -17,6 +17,18 @@ npx gh-like-diff --staged --save pr   # Save staged diff to ~/Desktop/pr.html
 ### GitHub-Faithful UI
 Side-by-side and unified diff views with GitHub's exact color palette, typography, and component design. Automatically adapts to your OS light/dark mode preference, with a manual toggle button.
 
+### Line Highlighting & Range Select
+Click any line number to highlight the row and update the URL hash (`#diff-{hash}L{num}`). Shift+click a second line to select a range — just like GitHub. Share the URL and the recipient will auto-scroll to the highlighted line.
+
+### Inline Review Memos
+Double-click a line number to attach a review note. Memos persist in `localStorage` and can be viewed in a side panel or exported as text. Perfect for offline code review without a PR.
+
+### Review Progress Tracker
+Each file has a "Viewed" checkbox. A progress bar in the toolbar shows `3/12 files reviewed`. Press `r` to toggle the current file. State persists across page reloads.
+
+### Hunk Copy & File Filter
+Copy a hunk's code (additions + context) to clipboard with one click. Filter files by name with the toolbar search box — both the diff cards and sidebar update in real time.
+
 ### Keyboard-First Navigation
 Designed for developers who live in the terminal:
 
@@ -24,6 +36,7 @@ Designed for developers who live in the terminal:
 |-----|--------|
 | `j` / `k` | Jump between files |
 | `n` / `p` | Jump between hunks |
+| `r` | Toggle "Viewed" for current file |
 | `/` | Open search overlay |
 | `b` | Toggle sidebar |
 | `?` | Toggle keyboard shortcuts |
@@ -39,6 +52,15 @@ A collapsible sidebar lists all changed files with:
 
 ### In-Page Search
 Press `/` to open a search overlay that highlights matches across the entire diff. Navigate results with `Enter` / `Shift+Enter`.
+
+### Context Expansion
+GitHub-style expand buttons on gap rows: ▲ (show lines above), ▼ (show lines below), and ↕ (show all hidden lines). Expands 20 lines per click, with full line-highlight and memo support on expanded rows.
+
+### Print-Optimized
+`@media print` rules hide all interactive chrome (toolbar, sidebar, buttons) and optimize the diff layout for paper. Print directly from the browser for code review meetings.
+
+### Sidebar Change Heatmap
+The sidebar uses a color-coded left border to visualize change intensity — files with more additions/deletions appear with a stronger red accent, making hotspots immediately visible.
 
 ### Large Diff Performance
 Files with 500+ changed lines are lazy-loaded — rendered only when you click "Load diff". This keeps memory flat and the browser responsive, even on diffs with thousands of files (a common pain point in Unity projects with `.meta` files).
@@ -198,16 +220,35 @@ gh-like-diff/
 │       ├── styles.ts              # GitHub-style CSS (light/dark, all components)
 │       ├── scripts.ts             # Client JS aggregator
 │       └── components/
-│           ├── keyboard-nav.ts    # j/k/n/p navigation + scroll tracking
+│           ├── context-expand.ts  # ▲/▼/↕ context expansion
 │           ├── file-tree.ts       # Sidebar toggle
+│           ├── keyboard-nav.ts    # j/k/n/p/r navigation + scroll tracking
+│           ├── line-highlight.ts  # Click-to-highlight + URL hash + range select
+│           ├── line-memo.ts       # Inline review memos (localStorage)
+│           ├── review-progress.ts # Per-file "Viewed" checkboxes + progress bar
 │           ├── search.ts          # In-page search with highlight
+│           ├── split-resizer.ts   # Drag-to-resize split view divider
 │           ├── theme-toggle.ts    # Light/dark/auto switching
-│           ├── toolbar.ts         # View switching, file collapse
-│           └── virtual-scroll.ts  # Lazy loading + synchronized scrolling
-├── test/                           # Test directory (fixtures, unit tests)
+│           ├── toolbar.ts         # View switching, file collapse, hunk copy, filter
+│           └── virtual-scroll.ts  # Lazy loading for large files
+├── tests/
+│   ├── unit/                       # Vitest unit tests (31 tests)
+│   │   ├── parser.test.ts
+│   │   ├── renderer.test.ts
+│   │   └── template.test.ts
+│   └── e2e/                        # Playwright E2E tests (26 tests)
+│       ├── fixtures/generate-diff.ts
+│       ├── line-highlight.spec.ts
+│       ├── line-memo.spec.ts
+│       ├── file-collapse.spec.ts
+│       ├── context-expand.spec.ts
+│       ├── review-progress.spec.ts
+│       └── hunk-copy.spec.ts
 ├── package.json
 ├── tsconfig.json
-└── tsup.config.ts                  # Build config (CJS + ESM + DTS)
+├── tsup.config.ts                  # Build config (CJS + ESM + DTS)
+├── vitest.config.ts
+└── playwright.config.ts
 ```
 
 ### Architecture Decisions
@@ -225,15 +266,16 @@ gh-like-diff/
 - **tsup** (esbuild) — Build pipeline producing CJS, ESM, and DTS outputs
 - **diff2html** — Unified diff parsing engine
 - **commander** — CLI argument parsing
-- **vitest** — Test framework (ready for test authoring)
+- **vitest** — Unit test framework (31 tests)
+- **Playwright** — E2E browser test framework (26 tests)
 
 ### Build Output
 
 | File | Size | Purpose |
 |------|------|---------|
-| `dist/gh-like-diff.js` | 48 KB | CLI binary (Node.js) |
-| `dist/index.mjs` | 40 KB | ESM library |
-| `dist/index.js` | 39 KB | CJS library |
+| `dist/gh-like-diff.js` | 88 KB | CLI binary (Node.js) |
+| `dist/index.mjs` | 80 KB | ESM library |
+| `dist/index.js` | 81 KB | CJS library |
 | `dist/index.d.ts` | 1 KB | TypeScript declarations |
 
 ---
@@ -269,6 +311,8 @@ Key findings across 15+ sources identified **10 critical pain points** in local 
 
 **Phase 5: Documentation** — This README.
 
+**Phase 6: GitHub互換 + 独自機能** — GitHubのdiff UIとのクリック挙動の差異を修正し、行ハイライト・範囲選択・URLハッシュ連動を実装。加えてオフライン・自己完結型の特性を活かした独自機能（インラインメモ、レビュー進捗トラッカー、ハンクコピー）を追加。Vitest + Playwright によるテストスイート（57テスト）も整備。多角的なコードレビューで12件のバグ修正・セキュリティ改善を実施。
+
 ### What the AI Did Well
 - Parallel research across many sources to identify real user pain points
 - Architecture decisions grounded in the actual limitations of existing tools
@@ -285,41 +329,37 @@ Key findings across 15+ sources identified **10 critical pain points** in local 
 
 ## Known Issues & Near-Term TODO
 
-v1.0 として動作する状態ですが、以下の残作業・改善ポイントがあります。
-
 ### Must Fix (v1.0 patch)
 
-- [ ] **ライブビュー切替の再レンダー未実装** — Unified ↔ Split ボタンはUI上存在するが、クライアント側の `renderAllFiles` / `renderFile` が未定義のため、切替時に実際のDOM再描画が行われない。埋め込みJSONからクライアントJSでレンダーする仕組みの追加が必要
-- [ ] **バイナリファイル・空ファイルの表示** — バイナリファイルや空diffが含まれる場合のフォールバック表示がない（「Binary file differs」等のメッセージ表示）
-- [ ] **`--ignore` のgitパススペック制約** — 現在 `:(exclude)` を使用しているが、git pathspecの仕様上 `*.meta` のようなグロブは一部ケースで動作しない可能性がある。`--diff-filter` との組み合わせやpost-filteringの検討が必要
+- [ ] **ライブビュー切替の再レンダー未実装** — Unified ↔ Split ボタンはUI上存在するが、クライアント側で切替時のDOM再描画が行われない。埋め込みJSONデータの更新のみ対応済み
+- [ ] **バイナリファイル・空ファイルの表示** — バイナリファイルや空diffが含まれる場合のフォールバック表示がない
+- [ ] **遅延読み込み未接続** — `virtual-scroll.ts` が `window.__gld.renderFile` を呼ぶが未定義。大量ファイルのdiffで遅延レンダーが機能しない
 
 ### Should Fix (v1.0.x)
 
-- [ ] **テストの作成** — `test/` ディレクトリはスキャフォールド済みだが中身が空。parser, renderer, args の単体テストと、実diffを使った統合テストが必要
-- [ ] **シンタックスハイライト** — 現在はモノクロのコード表示。highlight.js または Shiki を統合してキーワード・文字列等の色分けを追加
-- [ ] **`.gh-like-diffrc` 設定ファイル** — プロジェクトルートの `.gh-like-diffrc` または `package.json` の `gh-like-diff` フィールドから `--ignore` パターン等のデフォルト設定を読み込む仕組み
-- [ ] **GitHub Actions CI** — push/PRでのビルド・テスト自動化、npm publish ワークフロー
-- [ ] **npm publish 準備** — npm上の名前空間確認、`prepublishOnly` テスト、CHANGELOG.md の作成
+- [ ] **シンタックスハイライト** — 現在はモノクロのコード表示。highlight.js または Shiki の統合
+- [ ] **`.gh-like-diffrc` 設定ファイル** — デフォルト設定の読み込み
+- [ ] **GitHub Actions CI** — ビルド・テスト自動化、npm publish ワークフロー
+- [ ] **npm publish 準備** — npm上の名前空間確認、CHANGELOG.md の作成
+- [ ] **stdin/パイプ入力** — `git diff | gh-like-diff` のようなパイプ入力に未対応
+- [ ] **ARIA属性** — スクリーンリーダー対応、キーボードショートカットとの競合回避
 
 ### Nice to Have (v1.1)
 
-- [ ] **ワード単位のdiffハイライト改善** — 現在のレンダラーは行単位の差分のみ表示。diff2htmlの `diffStyle: 'word'` パース結果を活用して変更箇所のインラインハイライトを表示
-- [ ] **コンテキスト展開** — `@@` ハンクヘッダーのクリックで前後の追加コンテキスト行を読み込む機能（現在はCSSクラスのみ存在しスクリプト未実装）
-- [ ] **サイドバーのファイルフィルター/検索** — ファイル数が多いdiffでサイドバー内をインクリメンタルに絞り込む入力欄
-- [ ] **同期スクロールの改善** — side-by-side表示で左右テーブルのスクロールを完全同期（現在は基本実装済みだが行数不一致時にずれる場合がある）
-- [ ] **Windowsパスハンドリング** — macOSで開発・テスト済み。Windows環境での `open` コマンド代替やパス区切り文字の対応確認
-- [ ] **リネームファイルの移動検出表示** — `old → new` の表示はあるが、リネーム元/先の内容diffが見やすいレイアウトの検討
-- [ ] **アクセシビリティ** — ARIAラベル、スクリーンリーダー対応、フォーカス管理
-- [ ] **examplesディレクトリ** — 基本的な使用例、大規模diff例、カスタムテーマ例のサンプルHTML生成スクリプト
+- [ ] **ワード単位のdiffハイライト改善** — diff2htmlの `diffStyle: 'word'` を活用した変更箇所のインラインハイライト
+- [ ] **同期スクロールの改善** — side-by-side表示で行数不一致時のずれ対応
+- [ ] **リネームファイルの移動検出表示** — リネーム元/先の見やすいレイアウト
+- [ ] **examplesディレクトリ** — 使用例のサンプルHTML生成スクリプト
+- [ ] **ダークモードCSS統合** — 重複したダークモードスタイル (~1.5KB) の統合
+- [ ] **SVGアイコン統合** — インラインで重複しているSVGアイコンの共通化
 
 ---
 
 ## Roadmap
 
 ### v1.5 — "The Collaborative Diff"
-- **Inline comments** — Click a line number to add a comment; stored as JSON inside the HTML file
 - **Comment import/export** — `gh-like-diff comments export review.html > comments.json`
-- **Annotation mode** — Mark lines as "reviewed", "needs discussion", or "approved"
+- **Annotation mode** — Mark lines as "reviewed", "needs discussion", or "approved"（基本的なレビュー進捗は実装済み）
 - **Interdiff** — `gh-like-diff interdiff v1.html v2.html` to compare two saved diffs
 - **Plugin system** — `--plugin ./my-plugin.js` for custom toolbar buttons and rendering
 
@@ -336,11 +376,18 @@ v1.0 として動作する状態ですが、以下の残作業・改善ポイン
 
 Contributions are welcome! Areas that would benefit most:
 
-- **Tests** — Unit tests for parser, renderer, and CLI argument handling (`test/` is scaffolded and ready)
 - **CI/CD** — GitHub Actions for build, test, and npm publish
 - **Syntax highlighting** — Integrate highlight.js or Shiki for code coloring
 - **Accessibility** — ARIA labels, screen reader support, focus management
-- **Windows testing** — The tool is developed on macOS; Windows path handling may need fixes
+- **Live view switching** — Client-side re-render when toggling unified ↔ split view
+- **stdin support** — Accept piped diff input from other commands
+
+```bash
+# Development
+npm run build          # Build with tsup
+npm run test           # Run vitest unit tests (31 tests)
+npm run test:e2e       # Run Playwright E2E tests (26 tests)
+```
 
 ---
 
