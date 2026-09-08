@@ -16,7 +16,8 @@ test.describe('Hunk Copy', () => {
     await expect(copyBtn).toBeAttached();
   });
 
-  test('clicking copy button copies hunk code to clipboard', async ({ page, unifiedDiffPageUrl, context }) => {
+  test('clicking copy button copies hunk code to clipboard', async ({ page, unifiedDiffPageUrl, context, browserName }) => {
+    test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only');
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto(unifiedDiffPageUrl);
     const hunk = page.locator('.gp-view-unified .gp-hunk').first();

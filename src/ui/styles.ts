@@ -374,6 +374,7 @@ body {
   color: var(--gld-fg-subtle);
   text-align: right;
   padding: 0 8px !important;
+  -webkit-user-select: none;
   user-select: none;
   cursor: pointer;
   border-right: 1px solid var(--gld-border-muted);
@@ -392,6 +393,7 @@ body {
   display: inline-block;
   width: 12px;
   color: var(--gld-fg-muted);
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -435,6 +437,7 @@ body {
   max-width: 50px;
   border-right: 1px solid var(--gld-border-muted);
   background: var(--gld-canvas-subtle);
+  -webkit-user-select: none;
   user-select: none;
   vertical-align: middle;
 }
@@ -519,6 +522,7 @@ body {
   cursor: col-resize;
   z-index: 5;
   background: transparent;
+  -webkit-user-select: none;
   user-select: none;
 }
 .gp-side-divider::before {
@@ -539,6 +543,7 @@ body.gp-resizing .gp-side-divider::before {
 }
 body.gp-resizing {
   cursor: col-resize !important;
+  -webkit-user-select: none !important;
   user-select: none !important;
 }
 body.gp-resizing * {
@@ -952,6 +957,9 @@ body[data-view="line"] .gp-view-side { display: none; }
   .gp-main { padding: 8px; }
   .gp-side-table { table-layout: auto; }
   .gp-side-table td:nth-child(2) { border-right: none; }
+  /* table-layout switches to auto here, so the divider no longer sits on the column
+     boundary; leaving it visible gives an invisible strip that blocks text selection. */
+  .gp-side-divider { display: none; }
   .gp-file-filter { width: 100px; }
 }
 
@@ -1024,6 +1032,7 @@ body.gp-wrap .gp-diff-table { table-layout: fixed; width: 100%; }
   font-size: 10px;
   line-height: 14px;
   vertical-align: middle;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -1122,6 +1131,40 @@ body.gp-no-minimap .gp-main { padding-right: 8px; }
   /* Long lines are clipped, not scrolled, on paper — wrap them instead of losing them. */
   .gp-code, .gp-code-inner { white-space: pre-wrap !important; overflow: visible !important; overflow-wrap: anywhere; }
   .gp-diff-table { table-layout: fixed; width: 100%; }
+}
+
+/* === Unified view: keep the gutters visible while scrolling sideways === */
+/* The unified table overflows its wrapper, so without this the line numbers scroll out of
+   view and there is nothing left to click for highlighting or memos. */
+.gp-unified-wrapper .gp-diff-table .gp-ln {
+  position: sticky;
+  z-index: 2;
+  background: var(--gld-canvas);
+}
+.gp-unified-wrapper .gp-diff-table .gp-ln:nth-child(1) { left: 0; }
+.gp-unified-wrapper .gp-diff-table .gp-ln:nth-child(2) { left: var(--gld-ln-width); }
+/* Row tints must win over the plain canvas background above. */
+.gp-unified-wrapper tr.gp-add .gp-ln { background: var(--gld-add-num-bg); }
+.gp-unified-wrapper tr.gp-del .gp-ln { background: var(--gld-del-num-bg); }
+.gp-unified-wrapper tr.gp-hunk .gp-ln { background: var(--gld-hunk-bg); }
+.gp-unified-wrapper tr.gp-highlighted .gp-ln { background: #fff8c5; }
+body.gp-wrap .gp-unified-wrapper .gp-diff-table .gp-ln { position: static; }
+
+/* === CRLF marker === */
+.gp-eol-marker {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--gld-border);
+  border-radius: 3px;
+  background: var(--gld-neutral-muted);
+  color: var(--gld-fg-muted);
+  font-size: 9px;
+  line-height: 14px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+  -webkit-user-select: none;
+  user-select: none;
 }
 `;
 }

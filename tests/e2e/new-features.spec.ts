@@ -45,7 +45,11 @@ test.describe('Command Palette', () => {
 });
 
 test.describe('Toast Notification', () => {
-  test('toast appears on hunk copy', async ({ page, unifiedDiffPageUrl, context }) => {
+  test('toast appears on hunk copy', async ({ page, unifiedDiffPageUrl, context, browserName }) => {
+    // Only Chromium implements the clipboard-write permission; elsewhere the write is
+    // denied and the product correctly reports a failure instead, which is covered by
+    // the copy-failure test in view-prefs.spec.ts.
+    test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only');
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto(unifiedDiffPageUrl);
     const hunk = page.locator('.gp-view-unified .gp-hunk').first();
@@ -105,17 +109,17 @@ test.describe('Directory Tree Sidebar', () => {
 
   test('clicking directory toggles children visibility', async ({ page, diffPageUrl }) => {
     await page.goto(diffPageUrl);
-    // Open sidebar first
-    const sidebarBtn = page.locator('[aria-label="Toggle sidebar"]');
-    if (await sidebarBtn.count() > 0) {
-      await sidebarBtn.click();
-    }
+    // The sidebar is already open; clicking the toggle would close it and leave the tree
+    // mid-transition, which Firefox correctly refuses to click into.
     const dirToggle = page.locator('.gp-tree-toggle').first();
-    if (await dirToggle.count() > 0) {
-      await dirToggle.click();
-      const parent = dirToggle.locator('xpath=..');
-      await expect(parent).toHaveClass(/collapsed/);
-    }
+    await expect(dirToggle).toBeVisible();
+    await dirToggle.click();
+    await expect(dirToggle.locator('xpath=..')).toHaveClass(/collapsed/);
+    await expect(dirToggle).toHaveAttribute('aria-expanded', 'false');
+
+    await dirToggle.click();
+    await expect(dirToggle.locator('xpath=..')).not.toHaveClass(/collapsed/);
+    await expect(dirToggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   test('file items in tree navigate to files', async ({ page, diffPageUrl }) => {

@@ -70,16 +70,31 @@ describe('generate', () => {
     expect(generate(DIFF, { fileContents: { 'src/a.ts': ['x'] } })).toContain('"src/a.ts"');
   });
 
-  it('escapes a closing script tag inside embedded sources', () => {
-    // An unescaped </script> in file contents would terminate the JSON block early and
-    // dump the rest of the file into the document as markup.
-    const html = generate(DIFF, { fileContents: { 'src/a.ts': ['</script><img onerror=alert(1)>'] } });
-    const sources = html.slice(html.indexOf('id="gp-file-sources">') + 'id="gp-file-sources">'.length);
-    const block = sources.slice(0, sources.indexOf('</script>'));
-    // The closing tag is escaped, so the JSON block survives intact to the real </script>.
-    expect(block).toContain('<\\/script>');
-    expect(JSON.parse(block.replace(/<\\\//g, '</'))['src/a.ts'])
-      .toEqual(['</script><img onerror=alert(1)>']);
+  it('cannot be broken out of by a closing script tag in the source', () => {
+    // Two layers protect the inline JSON block: the embedded lines are highlighted (which
+    // escapes < and >), and safeJson() rewrites any surviving </ sequence. Either alone
+    // would be enough; together there is no literal </script> before the real one.
+    const html = generate(DIFF, {
+      fileContents: { 'src/a.ts': ['</script><img onerror=alert(1)>'] },
+    });
+    const marker = 'id="gp-file-sources">';
+    const block = html.slice(html.indexOf(marker) + marker.length);
+    const json = block.slice(0, block.indexOf('</script>'));
+
+    expect(json).not.toContain('<img onerror');
+    expect(JSON.parse(json)['src/a.ts'][0]).toContain('&lt;/script&gt;');
+  });
+
+  it('escapes embedded sources for a language it cannot highlight', () => {
+    // The fallback path must escape too — the lines are inserted with innerHTML.
+    const diff = DIFF.replaceAll('src/a.ts', 'notes.unknownext');
+    const html = generate(diff, {
+      fileContents: { 'notes.unknownext': ['<img src=x onerror=alert(1)>'] },
+    });
+    const marker = 'id="gp-file-sources">';
+    const block = html.slice(html.indexOf(marker) + marker.length);
+    const json = block.slice(0, block.indexOf('</script>'));
+    expect(JSON.parse(json)['notes.unknownext'][0]).toBe('&lt;img src=x onerror=alert(1)&gt;');
   });
 
   it('gives two different diffs different storage identities', () => {

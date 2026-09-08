@@ -51,6 +51,7 @@ export function generate(diffString: string, options: GhLikeDiffOptions = {}): s
     stats: parsed.stats,
     fileContents: options.fileContents,
     noNewline: parsed.noNewline,
+    crlf: parsed.crlf,
   });
 }
 
@@ -62,5 +63,6 @@ export function render(diffString: string, options: GhLikeDiffOptions = {}): str
   return renderDiff(parsed.files, {
     outputFormat: options.outputFormat || 'side-by-side',
     noNewline: parsed.noNewline,
+    crlf: parsed.crlf,
   });
 }

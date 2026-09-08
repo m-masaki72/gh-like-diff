@@ -5,19 +5,136 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+# One run per ref. Pushing again to a branch cancels the in-flight run, but never the one
+# for main — cancelling there would leave the default branch without a verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  # Skips the post-install browser download; the e2e job installs exactly what it needs.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
 jobs:
-  build:
+  unit:
+    name: Unit (node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
+      # Report every version's result: a failure on 18 must not hide a failure on 22.
+      fail-fast: false
       matrix:
         node-version: [18, 20, 22]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+
       - run: npm ci
-      - run: npm run build
+        timeout-minutes: 5
+
       - run: npm run typecheck
+
+      # Before the tests: the CLI integration specs drive dist/gh-like-diff.js.
+      - run: npm run build
+
+      - name: Unit tests
+        run: npm run test -- --reporter=default --reporter=junit --outputFile=junit-unit.xml
+        timeout-minutes: 5
+
+      - name: Upload unit test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-report-node${{ matrix.node-version }}
+          path: junit-unit.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  e2e:
+    name: E2E (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+        timeout-minutes: 5
+
+      - run: npm run build
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Browsers are ~100MB each and change only with the Playwright version.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}-${{ matrix.browser }}
+
+      - name: Install browser
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+        timeout-minutes: 10
+
+      # System dependencies are not part of the cached browser directory, so they are
+      # installed even on a cache hit.
+      - name: Install browser system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps ${{ matrix.browser }}
+        timeout-minutes: 5
+
+      - name: E2E tests
+        run: npx playwright test --project=${{ matrix.browser }}
+        timeout-minutes: 12
+
+      # Traces, screenshots and the HTML report are the only way to diagnose a failure
+      # that does not reproduce locally, so keep them whenever the job did not pass.
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # A single required check to protect the branch with, instead of listing every matrix
+  # leg by name. Explicitly fails when a needed job was skipped or cancelled.
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [unit, e2e]
+    if: ${{ always() }}
+    steps:
+      - name: Check results
+        run: |
+          echo "unit: ${{ needs.unit.result }}"
+          echo "e2e:  ${{ needs.e2e.result }}"
+          if [ "${{ needs.unit.result }}" != "success" ] || [ "${{ needs.e2e.result }}" != "success" ]; then
+            echo "::error::One or more required jobs did not succeed"
+            exit 1
+          fi

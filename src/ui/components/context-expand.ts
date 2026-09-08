@@ -4,10 +4,6 @@ export function getContextExpandScript(): string {
   window.__gld = window.__gld || {};
   var EXPAND_STEP = 20;
 
-  function escHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
   // Parsed once: re-parsing the whole diff plus every file body on each arrow click made
   // repeated expansion visibly stutter on large diffs.
   var sourcesCache = null;
@@ -34,17 +30,18 @@ export function getContextExpandScript(): string {
     for (var i = 0; i < count; i++) {
       var newNum = newStart + i;
       var oldNum = oldStart + i;
-      var content = escHtml(lines[newNum - 1] || '');
+      // Already highlighted and escaped by the server; escaping again would print tags.
+      var content = lines[newNum - 1] || '';
       if (isSide) {
         // Same .gp-code-inner wrapper the server-rendered rows use, so expanded lines
         // scroll and wrap identically instead of overflowing into the other pane.
-        html += '<tr class="gp-ctx">' +
+        html += '<tr class="gp-ctx gp-expanded">' +
           '<td class="gp-ln gp-ctx" ' + fi + ' data-ln="' + oldNum + '" data-side="L">' + oldNum + '</td>' +
           '<td class="gp-code gp-ctx"><div class="gp-code-inner">' + content + '</div></td>' +
           '<td class="gp-ln gp-ctx" ' + fi + ' data-ln="' + newNum + '" data-side="R">' + newNum + '</td>' +
           '<td class="gp-code gp-ctx"><div class="gp-code-inner">' + content + '</div></td></tr>';
       } else {
-        html += '<tr class="gp-ctx">' +
+        html += '<tr class="gp-ctx gp-expanded">' +
           '<td class="gp-ln" ' + fi + ' data-ln="' + newNum + '" data-side="R">' + newNum + '</td>' +
           '<td class="gp-ln" ' + fi + ' data-ln="' + oldNum + '" data-side="L">' + oldNum + '</td>' +
           '<td class="gp-code"><span class="gp-prefix"> </span>' + content + '</td></tr>';

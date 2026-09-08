@@ -7,6 +7,8 @@ export interface RenderOptions {
   embed?: boolean;
   /** Keys from the parser marking lines with no trailing newline. */
   noNewline?: Set<string>;
+  /** Keys from the parser marking lines whose source ended with CRLF. */
+  crlf?: Set<string>;
   /**
    * Paths whose full source is embedded in the page. Expand controls are only rendered
    * for these — a button with nothing to reveal is worse than no button at all.
@@ -16,6 +18,22 @@ export interface RenderOptions {
 
 function canExpand(file: DiffFile, options: RenderOptions): boolean {
   return !!options.expandableFiles && options.expandableFiles.has(filePath(file));
+}
+
+const CRLF_BADGE =
+  '<span class="gp-eol-marker" title="Line ends with CRLF" aria-label="Line ends with CRLF">CRLF</span>';
+
+// Only shown where the two sides of a pair disagree. A file that is CRLF throughout would
+// otherwise carry the marker on every row, which buries the one case that matters:
+// a line-ending conversion, where both sides are byte-identical apart from the CR.
+function crlfBadges(
+  options: RenderOptions, fileIndex: number, del?: DiffLine | null, ins?: DiffLine | null,
+): [string, string] {
+  if (!options.crlf) return ['', ''];
+  const left = !!del && del.oldNumber != null && options.crlf.has(`${fileIndex}:L:${del.oldNumber}`);
+  const right = !!ins && ins.newNumber != null && options.crlf.has(`${fileIndex}:R:${ins.newNumber}`);
+  if (left === right) return ['', ''];
+  return [left ? CRLF_BADGE : '', right ? CRLF_BADGE : ''];
 }
 
 const NO_NEWLINE_BADGE =
@@ -335,12 +353,14 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, options: RenderOpt
         for (let j = 0; j < dels.length; j++) {
           const word = j < pairCount
             ? renderWordDiffContent(dels[j], lang, wds[j].start, wds[j].oldEnd, 'gp-word-del')
+              + crlfBadges(options, fileIndex, dels[j], ins[j])[0]
             : undefined;
           rows += renderUnifiedLine(dels[j], fileIndex, options, word, j >= pairCount ? hlLine(dels[j], lang) : undefined);
         }
         for (let j = 0; j < ins.length; j++) {
           const word = j < pairCount
             ? renderWordDiffContent(ins[j], lang, wds[j].start, wds[j].newEnd, 'gp-word-add')
+              + crlfBadges(options, fileIndex, dels[j], ins[j])[1]
             : undefined;
           rows += renderUnifiedLine(ins[j], fileIndex, options, word, j >= pairCount ? hlLine(ins[j], lang) : undefined);
         }
@@ -468,8 +488,9 @@ function renderSideFile(file: DiffFile, fileIndex: number, options: RenderOption
       let rightHl: string | undefined;
       if (pair.left && pair.right && pair.left.type === LineType.DELETE && pair.right.type === LineType.INSERT) {
         const wd = computeWordDiffRange(pair.left.content.slice(1), pair.right.content.slice(1));
-        leftWordHtml = renderWordDiffContent(pair.left, lang, wd.start, wd.oldEnd, 'gp-word-del');
-        rightWordHtml = renderWordDiffContent(pair.right, lang, wd.start, wd.newEnd, 'gp-word-add');
+        const eol = crlfBadges(options, fileIndex, pair.left, pair.right);
+        leftWordHtml = renderWordDiffContent(pair.left, lang, wd.start, wd.oldEnd, 'gp-word-del') + eol[0];
+        rightWordHtml = renderWordDiffContent(pair.right, lang, wd.start, wd.newEnd, 'gp-word-add') + eol[1];
       } else {
         if (pair.left) leftHl = hlLine(pair.left, lang);
         if (pair.right) rightHl = hlLine(pair.right, lang);
@@ -521,7 +542,7 @@ function renderFileCard(file: DiffFile, fileIndex: number, options: RenderOption
       ${renderDiffDots(file.addedLines, file.deletedLines)}
     </div>
     <label class="gp-reviewed-label" title="Mark as reviewed">
-      <input type="checkbox" class="gp-reviewed-cb" data-file-index="${fileIndex}" onchange="window.__gld.toggleReviewed(${fileIndex})">
+      <input type="checkbox" class="gp-reviewed-cb" autocomplete="off" data-file-index="${fileIndex}" onchange="window.__gld.toggleReviewed(${fileIndex})">
       Viewed
     </label>
   </div>

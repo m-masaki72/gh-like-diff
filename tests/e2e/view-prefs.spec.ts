@@ -159,8 +159,9 @@ test.describe('Review workflow', () => {
 
     page.on('dialog', d => d.accept());
     await page.click('button[aria-label="Reset saved state"]');
-    await page.waitForTimeout(800);
-    expect(await page.locator('.gp-reviewed-cb:checked').count()).toBe(0);
+    // Reset reloads the page; a fixed wait raced the reload on slower engines, so poll
+    // for the post-reload state instead.
+    await expect(page.locator('.gp-reviewed-cb:checked')).toHaveCount(0, { timeout: 10000 });
   });
 });
 

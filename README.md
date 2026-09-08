@@ -105,6 +105,19 @@ Semantic HTML with full ARIA support: `role` attributes on toolbar, main content
 ### Sidebar Change Heatmap
 The sidebar uses a color-coded left border to visualize change intensity — files with more additions/deletions appear with a stronger red accent, making hotspots immediately visible.
 
+### Piped Input
+`git diff | gh-like-diff` renders a diff read from stdin. Nothing is taken from the current
+directory in this mode — the patch may describe a tree this machine does not have — so the
+context-expand controls are omitted rather than filled with unrelated local files.
+
+### Line Ending and Whitespace Signals
+A change that only touches the end of a line is otherwise invisible, because the two sides
+render identically. Both are marked:
+
+- `\` where a file has no trailing newline
+- `CRLF` where the two sides disagree on line endings, and only where they disagree — a
+  file that is CRLF throughout stays unmarked
+
 ### Self-Contained HTML Output
 The generated HTML file includes all CSS and JavaScript inlined — zero external dependencies, zero network requests. Open it from `file://`, share it on Slack, archive it as a build artifact. It just works, months later, on any machine.
 
@@ -179,6 +192,10 @@ gh-like-diff --no-open
 
 # Output parsed diff as JSON (for piping to other tools)
 gh-like-diff --json
+
+# Read a diff from stdin — no repository required
+git diff | gh-like-diff
+gh-like-diff < saved.patch
 
 # Output HTML fragment only (for embedding in existing pages)
 gh-like-diff --embed

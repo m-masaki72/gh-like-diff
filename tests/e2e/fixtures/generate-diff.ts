@@ -129,13 +129,26 @@ index 1111111..2222222 100644
  const tail = 1;
 `;
 
+  // Appended with explicit CRs so the marker has something to detect: diff2html strips
+  // them, which is exactly why the renderer needs the raw scan.
+  const crlfSection = 'diff --git a/src/win.ts b/src/win.ts\n'
+    + 'index 1111111..2222222 100644\n'
+    + '--- a/src/win.ts\n'
+    + '+++ b/src/win.ts\n'
+    + '@@ -1,2 +1,2 @@\n'
+    + '-const a = 1;\r\n'
+    + '-const b = 2;\r\n'
+    + '+const a = 1;\n'
+    + '+const b = 2;\n';
+
   const sources: Record<string, string[]> = {
+    'src/win.ts': ['const a = 1;', 'const b = 2;'],
     'src/deep/nested/module.ts': Array.from({ length: 300 }, (_, i) => `  const nested_${i + 1} = ${i + 1};`),
     'README.md': ['line1', 'line2 changed'],
     'src/long.ts': [`const url = "${long}";`, 'const short = 1;'],
     'src/unicode.ts': ['const emoji = "🎊 done";', 'const tail = 1;'],
   };
-  return { diff, sources };
+  return { diff: diff + crlfSection, sources };
 }
 
 function buildHtmlPage(

@@ -88,10 +88,17 @@ test.describe('Stylesheet integrity', () => {
 
   test('line numbers and prefixes are excluded from a text selection', async ({ page, unifiedDiffPageUrl }) => {
     await page.goto(unifiedDiffPageUrl);
-    const styles = await page.evaluate(() => ({
-      ln: getComputedStyle(document.querySelector('.gp-ln')!).userSelect,
-      prefix: getComputedStyle(document.querySelector('.gp-prefix')!).userSelect,
-    }));
+    // WebKit exposes only the prefixed property, so read both: without -webkit-user-select
+    // Safari happily drags line numbers into the copied text.
+    const styles = await page.evaluate(() => {
+      const read = (sel: string) => {
+        const cs = getComputedStyle(document.querySelector(sel)!) as CSSStyleDeclaration & {
+          webkitUserSelect?: string;
+        };
+        return cs.userSelect ?? cs.webkitUserSelect ?? cs.getPropertyValue('-webkit-user-select');
+      };
+      return { ln: read('.gp-ln'), prefix: read('.gp-prefix') };
+    });
     expect(styles.ln).toBe('none');
     expect(styles.prefix).toBe('none');
   });
@@ -100,5 +107,80 @@ test.describe('Stylesheet integrity', () => {
     await page.goto(diffPageUrl);
     const tabSize = await page.locator('.gp-code').first().evaluate(el => getComputedStyle(el).tabSize);
     expect(tabSize).toBe('4');
+  });
+});
+
+test.describe('Unified view gutters', () => {
+  test('line numbers stay pinned while the table scrolls sideways', async ({ page, edgeCaseUnifiedPageUrl }) => {
+    await page.goto(edgeCaseUnifiedPageUrl);
+    const file = page.locator('.gp-file').filter({ hasText: 'long.ts' }).first();
+    const wrapper = file.locator('.gp-view-unified .gp-unified-wrapper').first();
+
+    const scrollable = await wrapper.evaluate(el => el.scrollWidth > el.clientWidth + 1);
+    expect(scrollable).toBe(true);
+
+    const before = await file.locator('.gp-view-unified .gp-ln').first()
+      .evaluate(el => el.getBoundingClientRect().left);
+    await wrapper.evaluate(el => { el.scrollLeft = 300; });
+    await page.waitForTimeout(200);
+    const after = await file.locator('.gp-view-unified .gp-ln').first()
+      .evaluate(el => el.getBoundingClientRect().left);
+
+    // Without position:sticky the gutter slides away and the click target for line
+    // highlighting and memos goes with it.
+    expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
+  });
+
+  test('the gutter is opaque so code cannot show through it', async ({ page, edgeCaseUnifiedPageUrl }) => {
+    await page.goto(edgeCaseUnifiedPageUrl);
+    const bg = await page.locator('.gp-view-unified .gp-ln').first()
+      .evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+  });
+
+  test('the split divider is hidden where it no longer matches the columns', async ({ page, edgeCasePageUrl }) => {
+    await page.goto(edgeCasePageUrl);
+    const divider = page.locator('.gp-side-divider').first();
+    expect(await divider.evaluate(el => getComputedStyle(el).display)).not.toBe('none');
+
+    // Below 900px the table switches to auto layout, so a divider parked at the stored
+    // ratio would be an invisible strip that blocks selection and resizes nothing.
+    await page.setViewportSize({ width: 800, height: 900 });
+    await page.waitForTimeout(300);
+    expect(await divider.evaluate(el => getComputedStyle(el).display)).toBe('none');
+  });
+});
+
+test.describe('Line endings', () => {
+  test('a CRLF-to-LF conversion is visible', async ({ page, edgeCasePageUrl }) => {
+    await page.goto(edgeCasePageUrl);
+    const file = page.locator('.gp-file').filter({ hasText: 'win.ts' }).first();
+    const markers = file.locator('.gp-view-side .gp-eol-marker');
+    // Otherwise both rows read "const a = 1;" and nothing distinguishes them.
+    expect(await markers.count()).toBe(2);
+    await expect(markers.first()).toHaveAttribute('title', 'Line ends with CRLF');
+  });
+});
+
+test.describe('Expanded context', () => {
+  test('expanded lines are syntax highlighted like the rest of the file', async ({ page, edgeCaseUnifiedPageUrl }) => {
+    await page.goto(edgeCaseUnifiedPageUrl);
+    const file = page.locator('.gp-file').filter({ hasText: 'module.ts' }).first();
+    await file.locator('.gp-view-unified .gp-expand-arrow-up').first().click();
+    await page.waitForTimeout(300);
+
+    const highlighted = await file.locator('.gp-view-unified tr.gp-expanded [class^="hljs-"]').count();
+    // The sources are highlighted server-side, so no highlighter ships to the browser.
+    expect(highlighted).toBeGreaterThan(0);
+  });
+
+  test('expanded lines show code, not escaped markup', async ({ page, edgeCaseUnifiedPageUrl }) => {
+    await page.goto(edgeCaseUnifiedPageUrl);
+    const file = page.locator('.gp-file').filter({ hasText: 'module.ts' }).first();
+    await file.locator('.gp-view-unified .gp-expand-arrow-up').first().click();
+    await page.waitForTimeout(300);
+    const text = await file.locator('.gp-view-unified tr.gp-expanded .gp-code').first().innerText();
+    expect(text).not.toContain('<span');
+    expect(text).toContain('const');
   });
 });

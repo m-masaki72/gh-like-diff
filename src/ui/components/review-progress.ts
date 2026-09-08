@@ -56,14 +56,15 @@ export function getReviewProgressScript(): string {
     if (document.body.classList.contains('gp-unreviewed-only')) window.__gld.applyFileVisibility();
   };
 
+  // Synchronises every checkbox with the stored state instead of only ticking the saved
+  // ones. Firefox restores form control values across a reload, so after clearing storage
+  // the boxes came back ticked with nothing behind them.
   function restoreReviewState() {
     var state = loadReviewed();
-    Object.keys(state).forEach(function(idx) {
-      var cb = document.querySelector('.gp-reviewed-cb[data-file-index="' + idx + '"]');
-      if (cb) {
-        cb.checked = true;
-        setCollapsed(idx, true);
-      }
+    document.querySelectorAll('.gp-reviewed-cb').forEach(function(cb) {
+      var reviewed = !!state[cb.dataset.fileIndex];
+      cb.checked = reviewed;
+      setCollapsed(cb.dataset.fileIndex, reviewed);
     });
     updateProgress();
   }

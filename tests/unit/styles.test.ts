@@ -99,6 +99,14 @@ describe('required rules', () => {
     expect(css).toMatch(/\.gp-prefix\s*{[^}]*user-select:\s*none/);
   });
 
+  it('prefixes user-select for WebKit', () => {
+    // Safari exposes only -webkit-user-select; without it the gutter is draggable and
+    // line numbers end up in the clipboard.
+    const plain = (css.match(/(?<!-webkit-)user-select:/g) || []).length;
+    const prefixed = (css.match(/-webkit-user-select:/g) || []).length;
+    expect(prefixed).toBe(plain);
+  });
+
   it('sets an explicit tab width', () => {
     expect(css).toMatch(/tab-size:\s*4/);
   });

@@ -58,6 +58,27 @@ Markdownメモエクスポート、新側だけコピー、各種設定の永続
 **テスト:** 118 → 214件 (単体102 + E2E112)。E2E fixture に意地悪ケースを追加し、
 CSS巻き添え削除を検出する `chrome-integrity.spec.ts` を新設
 
+### Phase 9: CI・クロスブラウザ・残課題の解消
+- **stdin/パイプ入力** — `git diff | gh-like-diff`。リポジトリ不要。ローカルの同名ファイルを
+  読むと無関係なコードを見せてしまうため、この経路では展開ボタンを出さない
+- **CRLF の可視化** — 生diffから CR を拾い、新旧で**差があるときだけ**マーカーを出す
+- **Unified の行番号を sticky 化** — 横スクロールで消えてクリックできなくなる問題を解消
+- **900px以下で分割線を非表示** — `table-layout: auto` に切り替わりカラム境界と一致しないため
+- **展開行のシンタックスハイライト** — hljs をクライアントに積まず、
+  埋め込むソース自体をサーバ側でハイライト済みHTMLにして解決
+- **GitHub Actions CI** — 既存はビルドと型チェックのみでテスト未実行だった。
+  unit(node 18/20/22) と e2e(3ブラウザ) を分離し、concurrency・タイムアウト・
+  Playwright ブラウザキャッシュ・失敗時のレポート回収・単一の必須チェックを追加
+- **クロスブラウザE2E** — Firefox と WebKit を追加し、**実バグを2件検出**:
+  Firefox のフォーム状態復元でリセット後も ✓ が残る / WebKit に `-webkit-user-select` が無く
+  行番号がコピーに混入する
+
+**性能実測**（50ファイル・20,000変更行）: parse 10ms / generate 517ms / HTML 17.25MB /
+ブラウザ読込 832ms / 検索 約270ms / ビュー切替 約450ms。
+動作は実用範囲。サイズは第2ビューがほぼ半分（片ビューなら 7.42MB）を占める。
+
+**テスト:** 214 → 単体215 + E2E118×3ブラウザ
+
 ---
 
 ## Known Issues
@@ -75,9 +96,11 @@ CSS巻き添え削除を検出する `chrome-integrity.spec.ts` を新設
 
 - [x] ~~**シンタックスハイライト**~~ — highlight.js によるサーバーサイドハイライト実装済み
 - [ ] **`.gh-like-diffrc` 設定ファイル** — デフォルト設定の読み込み
-- [ ] **GitHub Actions CI** — ビルド・テスト自動化、npm publish ワークフロー
+- [x] ~~**GitHub Actions CI**~~ — unit(node 18/20/22) + e2e(chromium/firefox/webkit) を
+  concurrency・job/step タイムアウト・失敗時のレポート回収付きで自動化。
+  npm publish ワークフローは未着手
 - [ ] **npm publish 準備** — npm上の名前空間確認、CHANGELOG.md の作成
-- [ ] **stdin/パイプ入力** — `git diff | gh-like-diff` のようなパイプ入力に未対応
+- [x] ~~**stdin/パイプ入力**~~ — `git diff | gh-like-diff` に対応。リポジトリ外でも動作する
 - [x] ~~**ARIA属性**~~ — semantic HTML、ARIA roles/labels、スキップリンク実装済み
 
 ### Nice to Have (v1.1)
@@ -86,6 +109,7 @@ CSS巻き添え削除を検出する `chrome-integrity.spec.ts` を新設
 - [ ] **リネームファイルの移動検出表示** — リネーム元/先の見やすいレイアウト
 - [ ] **examplesディレクトリ** — 使用例のサンプルHTML生成スクリプト
 - [ ] **ダークモードCSS統合** — 重複したダークモードスタイルの統合
+      （`styles.test.ts` が2ブロックの変数集合一致を検査しているので、統合しても安全に検証できる）
 - [ ] **SVGアイコン統合** — インラインで重複しているSVGアイコンの共通化
 
 ---

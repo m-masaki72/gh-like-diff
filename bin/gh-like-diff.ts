@@ -1,6 +1,7 @@
 import { parseArgs } from '../src/cli/args.js';
 import { getGitInfo, getGitDiff, getNewFileContents, resolveNewSideRef } from '../src/cli/git.js';
 import { resolveOutputPath, writeOutput, openInBrowser, printSummary } from '../src/cli/output.js';
+import { hasPipedInput, readStdin } from '../src/cli/stdin.js';
 import { parse } from '../src/core/parser.js';
 import { buildHtml } from '../src/core/template.js';
 import { renderDiff } from '../src/core/renderer.js';
@@ -8,21 +9,28 @@ import { renderDiff } from '../src/core/renderer.js';
 function main() {
   try {
   const options = parseArgs(process.argv);
-  const gitInfo = getGitInfo();
 
-  if (!gitInfo.isRepo) {
+  // A piped diff is self-contained: it may come from another machine, a saved patch or a
+  // tool that is not git at all, so neither a repository nor git itself is required.
+  const piped = hasPipedInput();
+  const gitInfo = piped ? { repoName: '', branch: '', isRepo: false } : getGitInfo();
+
+  if (!piped && !gitInfo.isRepo) {
     console.error('\x1b[0;31mError: Not a git repository\x1b[0m');
+    console.error('Pipe a diff instead:  git diff | gh-like-diff');
     process.exit(1);
   }
 
   // Get diff
-  const diff = getGitDiff({
-    staged: options.staged,
-    contextLines: options.context,
-    refs: options.refs,
-    fileFilter: options.file,
-    ignore: options.ignore,
-  });
+  const diff = piped
+    ? readStdin()
+    : getGitDiff({
+      staged: options.staged,
+      contextLines: options.context,
+      refs: options.refs,
+      fileFilter: options.file,
+      ignore: options.ignore,
+    });
 
   if (!diff.trim()) {
     console.log('\x1b[0;36mNo changes detected.\x1b[0m');
@@ -31,6 +39,7 @@ function main() {
     console.log('  gh-like-diff HEAD~1          # Show last commit');
     console.log('  gh-like-diff main...HEAD     # Show changes from main');
     console.log('  gh-like-diff --staged        # Show staged changes');
+    console.log('  git diff | gh-like-diff      # Read a diff from stdin');
     process.exit(0);
   }
 
@@ -49,6 +58,7 @@ function main() {
       outputFormat: options.style === 'side' ? 'side-by-side' : 'line-by-line',
       embed: true,
       noNewline: parsed.noNewline,
+    crlf: parsed.crlf,
     });
     console.log(fragment);
     return;
@@ -56,12 +66,14 @@ function main() {
 
   // Read file contents for context expansion, from whichever revision the diff's "+" side
   // points at (working tree, index, or a commit).
+  // Skipped for piped input: the diff may describe a tree this machine does not have, and
+  // reading same-named files from the current directory would show unrelated code.
   const newSideRef = resolveNewSideRef({ staged: options.staged, refs: options.refs });
-  const fileContents = getNewFileContents(parsed.files, newSideRef);
+  const fileContents = piped ? {} : getNewFileContents(parsed.files, newSideRef);
 
   // Full HTML generation
   const html = buildHtml({
-    title: `gh-like-diff - ${gitInfo.repoName}`,
+    title: `gh-like-diff - ${gitInfo.repoName || 'diff'}`,
     repoName: gitInfo.repoName,
     branch: gitInfo.branch,
     timestamp: new Date().toLocaleString('ja-JP'),
@@ -71,6 +83,7 @@ function main() {
     stats: parsed.stats,
     fileContents,
     noNewline: parsed.noNewline,
+    crlf: parsed.crlf,
   });
 
   const outputPath = resolveOutputPath(options.save);
