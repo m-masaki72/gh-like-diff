@@ -5,7 +5,7 @@ GitHub風のdiffビューを生成するCLIツール＆JSライブラリ。全CS
 
 ## ビルド・テスト
 - `npm run build` — tsup (esbuild) でCJS/ESM/DTSをビルド
-- `npm run test` — vitest ユニットテスト (102テスト)
+- `npm run test` — vitest ユニットテスト (197テスト)
 - `npm run test:e2e` — Playwright E2E テスト (112テスト)
 - `npm run typecheck` — TypeScript型チェック
 
