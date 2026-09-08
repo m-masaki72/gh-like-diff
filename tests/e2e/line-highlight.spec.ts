@@ -23,8 +23,20 @@ test.describe('Line Highlight (GitHub-compatible)', () => {
     const secondLn = page.locator('.gp-ln[data-ln="3"][data-side="R"]').first();
     await firstLn.click();
     await secondLn.click();
-    const highlightedCount = await page.locator('.gp-highlighted').count();
-    expect(highlightedCount).toBe(1);
+    // The class is applied to the matching row in *both* views so the highlight survives a
+    // view switch, so assert on which line is marked rather than on a raw count.
+    const marked = await page.evaluate(() =>
+      [...document.querySelectorAll('.gp-highlighted')]
+        .map(tr => tr.querySelector('.gp-ln[data-side="R"]')?.textContent?.trim()));
+    expect(new Set(marked)).toEqual(new Set(['3']));
+  });
+
+  test('a single-line highlight survives switching views', async ({ page, diffPageUrl }) => {
+    await page.goto(diffPageUrl);
+    await page.locator('.gp-ln[data-ln="3"][data-side="R"]').first().click();
+    await page.click('#gp-btn-unified');
+    const visibleHighlight = await page.locator('.gp-view-unified tr.gp-highlighted').count();
+    expect(visibleHighlight).toBeGreaterThan(0);
   });
 
   test('shift+click selects a range of lines', async ({ page, diffPageUrl }) => {

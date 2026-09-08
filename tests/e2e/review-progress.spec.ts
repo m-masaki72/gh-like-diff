@@ -32,7 +32,7 @@ test.describe('Review Progress', () => {
     await page.goto(diffPageUrl);
     // Scroll past the header so first file is detected as "current"
     await page.evaluate(() => {
-      var file = document.querySelector('.gp-file');
+      const file = document.querySelector('.gp-file');
       if (file) window.scrollTo(0, file.getBoundingClientRect().top + window.scrollY - 50);
     });
     await page.waitForTimeout(200);

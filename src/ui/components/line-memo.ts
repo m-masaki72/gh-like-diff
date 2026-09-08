@@ -2,81 +2,119 @@ export function getLineMemoScript(): string {
   return `
 (function() {
   window.__gld = window.__gld || {};
-  var MEMO_KEY_PREFIX = 'gld-memos-';
+  var SEP = '\\u0001';
   var openEditor = null;
+  var openEditorId = null;
 
-  function escHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  function getMemoKey() {
-    var title = document.title || 'diff';
-    var h = 0;
-    for (var i = 0; i < title.length; i++) {
-      h = ((h << 5) - h + title.charCodeAt(i)) | 0;
-    }
-    return MEMO_KEY_PREFIX + Math.abs(h).toString(16).slice(0, 8);
-  }
-
-  function loadMemos() {
-    try {
-      var raw = localStorage.getItem(getMemoKey());
-      return raw ? JSON.parse(raw) : {};
-    } catch (e) { return {}; }
-  }
-
+  function memoKey() { return window.__gld.storageKey('gld-memos'); }
+  function loadMemos() { return window.__gld.readJson(memoKey(), {}) || {}; }
   function saveMemos(memos) {
-    try { localStorage.setItem(getMemoKey(), JSON.stringify(memos)); } catch (e) {}
-  }
-
-  function memoId(fileIdx, side, lineNum) {
-    return fileIdx + '-' + side + '-' + lineNum;
-  }
-
-  function removeBadge(tr) {
-    var existing = tr.querySelector('.gp-memo-badge');
-    if (existing) existing.remove();
-  }
-
-  function addBadge(tr, id) {
-    removeBadge(tr);
-    var lnCell = tr.querySelector('.gp-ln[data-ln]');
-    if (!lnCell) return;
-    var badge = document.createElement('span');
-    badge.className = 'gp-memo-badge';
-    badge.textContent = '\\uD83D\\uDCDD';
-    badge.title = 'Edit memo';
-    badge.onclick = function(e) {
-      e.stopPropagation();
-      openMemoEditor(tr, id);
-    };
-    lnCell.appendChild(badge);
-  }
-
-  function closeEditor() {
-    if (openEditor) {
-      openEditor.remove();
-      openEditor = null;
+    if (!window.__gld.writeJson(memoKey(), memos)) {
+      window.__gld.toast('Could not save memo - storage unavailable', { type: 'error' });
     }
   }
+
+  // Keyed on the file path, not its position in the diff: an index-based key restored
+  // notes onto whatever file happened to sit at that index in a different diff.
+  function memoId(path, side, lineNum) { return path + SEP + side + SEP + lineNum; }
+  function parseId(id) {
+    var parts = id.split(SEP);
+    return { path: parts[0], side: parts[1], line: parts[2] };
+  }
+
+  function cellsFor(path, side, lineNum) {
+    var file = document.querySelector('.gp-file[data-file-path="' + CSS.escape(path) + '"]');
+    if (!file) return [];
+    return Array.prototype.slice.call(file.querySelectorAll(
+      '.gp-ln[data-side="' + side + '"][data-ln="' + lineNum + '"]'));
+  }
+
+  function removeBadges(path, side, lineNum) {
+    cellsFor(path, side, lineNum).forEach(function(cell) {
+      var b = cell.querySelector('.gp-memo-badge');
+      if (b) b.remove();
+    });
+  }
+
+  // Badges go on the exact gutter cell the memo belongs to, in *both* views, so the note
+  // stays visible after a view switch and never appears against the opposite column.
+  function addBadges(id) {
+    var p = parseId(id);
+    removeBadges(p.path, p.side, p.line);
+    cellsFor(p.path, p.side, p.line).forEach(function(cell) {
+      var badge = document.createElement('span');
+      badge.className = 'gp-memo-badge';
+      badge.textContent = '\\uD83D\\uDCDD';
+      badge.title = 'Edit memo';
+      badge.onclick = function(e) {
+        e.stopPropagation();
+        var tr = cell.closest('tr');
+        if (tr) openMemoEditor(tr, id);
+      };
+      cell.appendChild(badge);
+    });
+  }
+
+  // force=true for an explicit dismiss (Cancel / Esc). Only the implicit close that
+  // happens when another line's memo is opened asks before throwing away a draft.
+  function closeEditor(force) {
+    if (!openEditor) return true;
+    var ta = openEditor.querySelector('textarea');
+    if (!force && ta && ta.value.trim() !== (ta.dataset.initial || '')) {
+      var ok = true;
+      try { ok = window.confirm('Discard unsaved memo?'); } catch (e) {}
+      if (!ok) return false;
+    }
+    openEditor.remove();
+    openEditor = null;
+    openEditorId = null;
+    return true;
+  }
+  window.__gld.closeMemoEditor = function() { return closeEditor(true); };
+  window.__gld.memoEditorOpen = function() { return !!openEditor; };
 
   function openMemoEditor(tr, id) {
-    closeEditor();
+    if (openEditorId === id) return;
+    if (!closeEditor(false)) return;
     var memos = loadMemos();
     var existing = memos[id] || '';
 
     var editorRow = document.createElement('tr');
     editorRow.className = 'gp-memo-editor-row';
     var td = document.createElement('td');
-    var colCount = tr.querySelectorAll('td').length;
-    td.colSpan = colCount;
+    td.colSpan = tr.querySelectorAll('td').length;
     td.className = 'gp-memo-editor';
 
     var textarea = document.createElement('textarea');
     textarea.className = 'gp-memo-textarea';
     textarea.value = existing;
-    textarea.placeholder = 'Add a review note...';
+    textarea.dataset.initial = existing;
+    textarea.placeholder = 'Add a review note... (Ctrl/Cmd+Enter to save, Esc to close)';
     textarea.rows = 3;
+
+    function save() {
+      var val = textarea.value.trim();
+      var current = loadMemos();
+      if (val) {
+        current[id] = val;
+        saveMemos(current);
+        addBadges(id);
+      } else {
+        delete current[id];
+        saveMemos(current);
+        var p = parseId(id);
+        removeBadges(p.path, p.side, p.line);
+      }
+      textarea.dataset.initial = val;
+      closeEditor(true);
+      updateMemoPanel();
+    }
+
+    textarea.addEventListener('keydown', function(e) {
+      if (window.__gld.composing(e)) return;
+      if (e.key === 'Escape') { e.stopPropagation(); closeEditor(true); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
+    });
 
     var actions = document.createElement('div');
     actions.className = 'gp-memo-actions';
@@ -84,35 +122,23 @@ export function getLineMemoScript(): string {
     var saveBtn = document.createElement('button');
     saveBtn.className = 'gp-btn gp-memo-save';
     saveBtn.textContent = 'Save';
-    saveBtn.onclick = function() {
-      var val = textarea.value.trim();
-      var memos = loadMemos();
-      if (val) {
-        memos[id] = val;
-        addBadge(tr, id);
-      } else {
-        delete memos[id];
-        removeBadge(tr);
-      }
-      saveMemos(memos);
-      closeEditor();
-      updateMemoPanel();
-    };
+    saveBtn.onclick = save;
 
     var cancelBtn = document.createElement('button');
     cancelBtn.className = 'gp-btn gp-memo-cancel';
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.onclick = closeEditor;
+    cancelBtn.onclick = function() { closeEditor(true); };
 
     var deleteBtn = document.createElement('button');
     deleteBtn.className = 'gp-btn gp-memo-delete';
     deleteBtn.textContent = 'Delete';
     deleteBtn.onclick = function() {
-      var memos = loadMemos();
-      delete memos[id];
-      saveMemos(memos);
-      removeBadge(tr);
-      closeEditor();
+      var current = loadMemos();
+      delete current[id];
+      saveMemos(current);
+      var p = parseId(id);
+      removeBadges(p.path, p.side, p.line);
+      closeEditor(true);
       updateMemoPanel();
     };
 
@@ -125,6 +151,7 @@ export function getLineMemoScript(): string {
 
     tr.parentNode.insertBefore(editorRow, tr.nextSibling);
     openEditor = editorRow;
+    openEditorId = id;
     textarea.focus();
   }
 
@@ -132,36 +159,32 @@ export function getLineMemoScript(): string {
     var lnCell = e.target.closest('.gp-ln[data-ln]');
     if (!lnCell) return;
     e.preventDefault();
-    var fileIdx = lnCell.dataset.fileIdx;
-    var side = lnCell.dataset.side;
-    var lineNum = lnCell.dataset.ln;
-    var id = memoId(fileIdx, side, lineNum);
+    var file = lnCell.closest('.gp-file');
+    if (!file) return;
+    var id = memoId(file.dataset.filePath, lnCell.dataset.side, lnCell.dataset.ln);
     var tr = lnCell.closest('tr');
     if (tr) openMemoEditor(tr, id);
   });
 
   function restoreBadges() {
     var memos = loadMemos();
-    Object.keys(memos).forEach(function(id) {
-      var parts = id.split('-');
-      var fileIdx = parts[0];
-      var side = parts[1];
-      var lineNum = parts[2];
-      var cell = document.querySelector('.gp-ln[data-file-idx="' + fileIdx + '"][data-side="' + side + '"][data-ln="' + lineNum + '"]');
-      if (cell) {
-        var tr = cell.closest('tr');
-        if (tr) addBadge(tr, id);
-      }
-    });
+    Object.keys(memos).forEach(addBadges);
+    updateMemoPanel();
+  }
+
+  function fileNameFor(path) {
+    var file = document.querySelector('.gp-file[data-file-path="' + CSS.escape(path) + '"]');
+    var name = file && file.querySelector('.gp-file-header-name');
+    return name ? name.textContent : path;
   }
 
   function updateMemoPanel() {
     var panel = document.getElementById('gp-memo-panel');
-    if (!panel) return;
     var memos = loadMemos();
     var keys = Object.keys(memos);
     var countEl = document.getElementById('gp-memo-count');
     if (countEl) countEl.textContent = keys.length;
+    if (!panel) return;
 
     var list = panel.querySelector('.gp-memo-list');
     if (!list) return;
@@ -173,23 +196,30 @@ export function getLineMemoScript(): string {
     }
 
     keys.forEach(function(id) {
-      var parts = id.split('-');
-      var fileIdx = parseInt(parts[0]);
-      var side = parts[1];
-      var lineNum = parts[2];
-      var fileEl = document.getElementById('gp-file-' + fileIdx);
-      var fileName = fileEl ? (fileEl.querySelector('.gp-file-header-name') || {}).textContent || 'File ' + fileIdx : 'File ' + fileIdx;
-
+      var p = parseId(id);
       var item = document.createElement('div');
       item.className = 'gp-memo-item';
-      item.innerHTML = '<div class="gp-memo-item-header"><strong>' + escHtml(fileName) + '</strong> <span class="gp-memo-item-line">' + escHtml(side + lineNum) + '</span></div><div class="gp-memo-item-text">' + escHtml(memos[id]) + '</div>';
+      item.innerHTML = '<div class="gp-memo-item-header"><strong>' + window.__gld.escHtml(fileNameFor(p.path)) +
+        '</strong> <span class="gp-memo-item-line">' + window.__gld.escHtml(p.side + p.line) +
+        '</span></div><div class="gp-memo-item-text">' + window.__gld.escHtml(memos[id]) + '</div>';
       item.onclick = function() {
-        var cell = document.querySelector('.gp-ln[data-file-idx="' + fileIdx + '"][data-side="' + side + '"][data-ln="' + lineNum + '"]');
-        if (cell) cell.closest('tr').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var cells = cellsFor(p.path, p.side, p.line).filter(function(c) {
+          return window.__gld.isUsable(c, { includeCollapsed: true });
+        });
+        if (!cells.length) {
+          window.__gld.toast('That line is not in this diff any more', { type: 'info' });
+          return;
+        }
+        var file = cells[0].closest('.gp-file');
+        var body = file && file.querySelector('.gp-file-body');
+        if (body && body.classList.contains('collapsed')) window.__gld.toggleFile(file.dataset.fileIndex);
+        window.__gld.scrollToElement(cells[0].closest('tr'), Math.round(window.innerHeight / 3));
       };
       list.appendChild(item);
     });
   }
+  window.__gld.updateMemoPanel = updateMemoPanel;
+  window.__gld.refreshMemoBadges = restoreBadges;
 
   window.__gld.toggleMemoPanel = function() {
     var panel = document.getElementById('gp-memo-panel');
@@ -199,19 +229,37 @@ export function getLineMemoScript(): string {
     if (!isOpen) updateMemoPanel();
   };
 
-  window.__gld.exportMemos = function() {
+  function memoText(markdown) {
     var memos = loadMemos();
     var keys = Object.keys(memos);
-    if (keys.length === 0) return;
-    var text = keys.map(function(id) {
-      var parts = id.split('-');
-      var fileEl = document.getElementById('gp-file-' + parts[0]);
-      var fileName = fileEl ? (fileEl.querySelector('.gp-file-header-name') || {}).textContent || 'File ' + parts[0] : 'File ' + parts[0];
-      return '[' + fileName + ' ' + parts[1] + parts[2] + '] ' + memos[id];
+    if (markdown) {
+      var byFile = {};
+      keys.forEach(function(id) {
+        var p = parseId(id);
+        (byFile[p.path] = byFile[p.path] || []).push({ side: p.side, line: p.line, text: memos[id] });
+      });
+      return Object.keys(byFile).map(function(path) {
+        var rows = byFile[path]
+          .sort(function(a, b) { return Number(a.line) - Number(b.line); })
+          .map(function(m) { return '- **' + m.side + m.line + '** ' + m.text.replace(/\\n/g, ' '); });
+        return '## ' + path + '\\n\\n' + rows.join('\\n');
+      }).join('\\n\\n');
+    }
+    return keys.map(function(id) {
+      var p = parseId(id);
+      return '[' + fileNameFor(p.path) + ' ' + p.side + p.line + '] ' + memos[id];
     }).join('\\n\\n');
-    navigator.clipboard.writeText(text).then(function() {
-      window.__gld.toast(keys.length + ' memo(s) copied', { type: 'success', duration: 2000 });
-    });
+  }
+
+  window.__gld.exportMemos = function(format) {
+    var count = Object.keys(loadMemos()).length;
+    if (count === 0) {
+      window.__gld.toast('No memos to export', { type: 'info', duration: 2000 });
+      return;
+    }
+    var markdown = format === 'markdown';
+    window.__gld.copyText(memoText(markdown),
+      count + ' memo(s) copied' + (markdown ? ' as Markdown' : ''), null);
   };
 
   if (document.readyState === 'loading') {

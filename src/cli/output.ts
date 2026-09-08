@@ -70,6 +70,10 @@ export function printSummary(info: {
   deletions: number;
   style: string;
   outputPath: string;
+  /** Shown so a setting coming from a file is never a silent surprise. */
+  configPath?: string | null;
+  /** How many files kept their context-expand controls, when some were dropped. */
+  expandInfo?: { included: number; total: number } | null;
 }): void {
   console.log(`${c.bold}${c.blue}gh-like-diff${c.reset}`);
   console.log(`  ${c.cyan}Repository:${c.reset} ${info.repoName}`);
@@ -77,6 +81,13 @@ export function printSummary(info: {
   console.log(`  ${c.cyan}Files:${c.reset}      ${info.fileCount} changed`);
   console.log(`  ${c.green}+${info.additions}${c.reset} additions, ${c.red}-${info.deletions}${c.reset} deletions`);
   console.log(`  ${c.cyan}View:${c.reset}       ${info.style}`);
+  if (info.expandInfo && info.expandInfo.included < info.expandInfo.total) {
+    console.log(`  ${c.cyan}Expand:${c.reset}     ${info.expandInfo.included}/${info.expandInfo.total} `
+      + `files (sources too large to embed for the rest)`);
+  }
+  if (info.configPath) {
+    console.log(`  ${c.cyan}Config:${c.reset}     ${info.configPath}`);
+  }
   console.log('');
   console.log(`${c.green}Generated:${c.reset} ${info.outputPath}`);
 }

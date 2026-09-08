@@ -45,7 +45,11 @@ test.describe('Command Palette', () => {
 });
 
 test.describe('Toast Notification', () => {
-  test('toast appears on hunk copy', async ({ page, unifiedDiffPageUrl, context }) => {
+  test('toast appears on hunk copy', async ({ page, unifiedDiffPageUrl, context, browserName }) => {
+    // Only Chromium implements the clipboard-write permission; elsewhere the write is
+    // denied and the product correctly reports a failure instead, which is covered by
+    // the copy-failure test in view-prefs.spec.ts.
+    test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only');
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto(unifiedDiffPageUrl);
     const hunk = page.locator('.gp-view-unified .gp-hunk').first();
@@ -105,17 +109,17 @@ test.describe('Directory Tree Sidebar', () => {
 
   test('clicking directory toggles children visibility', async ({ page, diffPageUrl }) => {
     await page.goto(diffPageUrl);
-    // Open sidebar first
-    const sidebarBtn = page.locator('[aria-label="Toggle sidebar"]');
-    if (await sidebarBtn.count() > 0) {
-      await sidebarBtn.click();
-    }
+    // The sidebar is already open; clicking the toggle would close it and leave the tree
+    // mid-transition, which Firefox correctly refuses to click into.
     const dirToggle = page.locator('.gp-tree-toggle').first();
-    if (await dirToggle.count() > 0) {
-      await dirToggle.click();
-      const parent = dirToggle.locator('xpath=..');
-      await expect(parent).toHaveClass(/collapsed/);
-    }
+    await expect(dirToggle).toBeVisible();
+    await dirToggle.click();
+    await expect(dirToggle.locator('xpath=..')).toHaveClass(/collapsed/);
+    await expect(dirToggle).toHaveAttribute('aria-expanded', 'false');
+
+    await dirToggle.click();
+    await expect(dirToggle.locator('xpath=..')).not.toHaveClass(/collapsed/);
+    await expect(dirToggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   test('file items in tree navigate to files', async ({ page, diffPageUrl }) => {
@@ -150,15 +154,30 @@ test.describe('Syntax Highlighting', () => {
     expect(await hljsSpans.count()).toBeGreaterThan(0);
   });
 
-  test('word-diff lines do not mix with syntax highlighting', async ({ page, unifiedDiffPageUrl }) => {
+  test('changed lines keep syntax highlighting under the word-diff marker', async ({ page, unifiedDiffPageUrl }) => {
     await page.goto(unifiedDiffPageUrl);
-    const wordDiffCells = page.locator('.gp-view-unified .gp-word-add, .gp-view-unified .gp-word-del');
-    const count = await wordDiffCells.count();
-    for (let i = 0; i < Math.min(count, 5); i++) {
-      const cell = wordDiffCells.nth(i);
-      const parent = cell.locator('xpath=ancestor::td[contains(@class,"gp-code")]');
-      const hljsInParent = await parent.locator('[class^="hljs-"]').count();
-      expect(hljsInParent).toBe(0);
-    }
+    // Previously word-diff and highlighting were mutually exclusive, so the lines the
+    // reviewer most wants to read were the only plain-black ones on the page.
+    const stats = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('.gp-view-unified tr')]
+        .filter(r => r.querySelector('.gp-word-add, .gp-word-del'));
+      return {
+        changedRows: rows.length,
+        hljsSpans: rows.reduce((n, r) => n + r.querySelectorAll('[class^="hljs-"]').length, 0),
+      };
+    });
+    expect(stats.changedRows).toBeGreaterThan(0);
+    expect(stats.hljsSpans).toBeGreaterThan(0);
+  });
+
+  test('word-diff markup stays well-formed inside highlighted code', async ({ page, unifiedDiffPageUrl }) => {
+    await page.goto(unifiedDiffPageUrl);
+    const balanced = await page.evaluate(() => {
+      // If the wrapper broke tag nesting the browser would repair it and the marker text
+      // would no longer match the source characters it is supposed to cover.
+      return [...document.querySelectorAll('.gp-word-add, .gp-word-del')]
+        .every(el => el.textContent && el.textContent.length > 0 && el.closest('.gp-code'));
+    });
+    expect(balanced).toBe(true);
   });
 });

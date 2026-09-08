@@ -106,8 +106,37 @@ describe('renderDiff', () => {
         },
       ],
     });
-    const html = renderDiff([file]);
+    // Expand controls now require the file's source to be embedded; without it the
+    // buttons would have nothing to reveal.
+    const opts = { outputFormat: 'side-by-side' as const, expandableFiles: new Set(['src/foo.ts']) };
+    const html = renderDiff([file], opts);
     expect(html).toContain('gp-expand-arrow-all');
+    expect(html).toContain('gp-expand-arrow-up');
+    expect(html).toContain('gp-expand-arrow-down');
+  });
+
+  it('omits expand controls when the file source is not embedded', () => {
+    const file = makeMockFile({
+      blocks: [
+        {
+          lines: [{ type: LineType.CONTEXT, content: ' line1', oldNumber: 1, newNumber: 1 }],
+          oldStartLine: 1,
+          oldStartLine2: null,
+          newStartLine: 1,
+          header: '@@ -1,1 +1,1 @@',
+        },
+        {
+          lines: [{ type: LineType.CONTEXT, content: ' line20', oldNumber: 20, newNumber: 20 }],
+          oldStartLine: 20,
+          oldStartLine2: null,
+          newStartLine: 20,
+          header: '@@ -20,1 +20,1 @@',
+        },
+      ],
+    });
+    const html = renderDiff([file]);
+    expect(html).not.toContain('gp-expand-arrow');
+    expect(html).not.toContain('gp-expand-row');
   });
 
   it('escapes HTML in file content', () => {
@@ -135,10 +164,12 @@ describe('renderDiff', () => {
     expect(html).toContain('data-file-idx="1"');
   });
 
-  it('generates lazy placeholder for large files', () => {
+  it('renders large files inline instead of behind a click-to-load placeholder', () => {
     const file = makeMockFile({ addedLines: 300, deletedLines: 300 });
-    const html = renderDiff([file], { outputFormat: 'side-by-side', maxLinesBeforeLazy: 500 });
-    expect(html).toContain('gp-lazy-placeholder');
+    const html = renderDiff([file], { outputFormat: 'side-by-side' });
+    expect(html).not.toContain('gp-lazy-placeholder');
+    expect(html).not.toContain('click to load');
+    expect(html).toContain('gp-word-add');
   });
 
   it('applies syntax highlighting to .ts files', () => {

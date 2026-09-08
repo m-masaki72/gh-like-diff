@@ -8,7 +8,10 @@
 npx gh-like-diff                      # View local changes in your browser
 npx gh-like-diff main...HEAD          # PR-style diff from main
 npx gh-like-diff --staged --save pr   # Save staged diff to ~/Desktop/pr.html
+git diff | npx gh-like-diff           # Or pipe a diff in from anywhere
 ```
+
+![Side-by-side view](docs/images/side-by-side-light.png)
 
 ---
 
@@ -20,8 +23,18 @@ Side-by-side and unified diff views with GitHub's exact color palette, typograph
 ### Line Highlighting & Range Select
 Click any line number to highlight the row and update the URL hash (`#diff-{hash}L{num}`). Shift+click a second line to select a range — just like GitHub. Share the URL and the recipient will auto-scroll to the highlighted line.
 
+![Unified view in dark mode](docs/images/unified-dark.png)
+
+*Unified view, dark theme. Changed lines keep their syntax highlighting under the word-diff
+marker, and every gap offers both expand directions plus "show all".*
+
 ### Inline Review Memos
 Double-click a line number to attach a review note. Memos persist in `localStorage` and can be viewed in a side panel or exported as text. Perfect for offline code review without a PR.
+
+![Adding a review memo to a line](docs/images/review-memo.png)
+
+*Double-click a line number to attach a note. Memos live in localStorage, keyed to this
+particular diff, and can be exported as text or Markdown.*
 
 ### Review Progress Tracker
 Each file has a "Viewed" checkbox. A progress bar in the toolbar shows `3/12 files reviewed`. Press `r` to toggle the current file. State persists across page reloads.
@@ -34,6 +47,8 @@ Server-side syntax highlighting via highlight.js — only the CSS theme ships in
 
 ### Command Palette
 Press `Cmd+K` (or `Ctrl+K`) to open a command palette with fuzzy search across files and built-in actions (view switching, theme toggle, search, export). Navigate with arrow keys, press Enter to execute.
+
+![Command palette](docs/images/command-palette.png)
 
 ### Toast Notifications
 Non-intrusive feedback for clipboard operations — copy a file path or hunk code and see a slide-up confirmation toast that auto-dismisses.
@@ -48,12 +63,19 @@ Designed for developers who live in the terminal:
 |-----|--------|
 | `j` / `k` | Jump between files |
 | `n` / `p` | Jump between hunks |
+| `u` | Jump to the next unreviewed file |
 | `r` | Toggle "Viewed" for current file |
 | `/` | Open search overlay |
 | `b` | Toggle sidebar |
-| `Cmd+K` | Command palette |
-| `?` | Toggle keyboard shortcuts |
-| `Escape` | Close overlays |
+| `w` | Toggle line wrapping |
+| `m` | Toggle minimap |
+| `Cmd+K` / `Ctrl+K` | Command palette |
+| `?` | Keyboard shortcut reference |
+| `Escape` | Close the innermost overlay |
+
+Modifier combinations are left to the browser, so `Cmd+R` reloads, `Cmd+P` prints and
+`Cmd+J` opens downloads as usual. Shortcuts are also suppressed while an IME conversion is
+in progress, so confirming Japanese input never fires an action.
 
 ### File Tree Sidebar
 A collapsible sidebar lists all changed files in a directory tree with:
@@ -64,10 +86,32 @@ A collapsible sidebar lists all changed files in a directory tree with:
 - Active file tracking on scroll
 
 ### In-Page Search
-Press `/` to open a search overlay that highlights matches across the entire diff. Navigate results with `Enter` / `Shift+Enter`.
+Press `/` to open a search overlay that highlights matches across the visible diff. Navigate
+results with `Enter` / `Shift+Enter`, and narrow the scope to added or deleted lines only.
+Highlighting is incremental but does not scroll the page while you type.
+
+![Searching within the diff](docs/images/search.png)
 
 ### Context Expansion
-GitHub-style expand buttons on gap rows: ▲ (show lines above), ▼ (show lines below), and ↕ (show all hidden lines). Expands 20 lines per click, with full line-highlight and memo support on expanded rows.
+GitHub-style expand buttons on every gap row: ▼ walks down from the top of the gap, ▲ walks
+up from the bottom, and ↕ reveals everything at once. Each arrow reveals lines contiguous
+with the hunk it points at, 20 at a time, with full line-highlight and memo support on the
+expanded rows.
+
+Expansion needs the file's full source. The CLI reads it from whichever revision the diff's
+"+" side refers to — the working tree, the index for `--staged`, or the right-hand ref of a
+range such as `main...HEAD`. When no source is available the controls are omitted rather
+than rendered inert.
+
+### Line Wrapping
+Long lines scroll horizontally inside their own cell by default. Press `w` (or use the
+toolbar button) to wrap them instead — useful for minified code and long URLs, where a
+4px scrollbar is easy to miss entirely.
+
+### Per-Diff State
+Memos, review progress and view preferences are keyed on a hash of the diff itself, not on
+the repository name, so two diffs of the same repo never inherit each other's notes. The
+**Reset** button clears everything this page has stored.
 
 ### Accessibility
 Semantic HTML with full ARIA support: `role` attributes on toolbar, main content, sidebar, and search overlay. Skip-to-content link, `aria-pressed` on toggle buttons, `aria-live` regions for dynamic content, and `progressbar` role on review progress.
@@ -77,6 +121,51 @@ Semantic HTML with full ARIA support: `role` attributes on toolbar, main content
 
 ### Sidebar Change Heatmap
 The sidebar uses a color-coded left border to visualize change intensity — files with more additions/deletions appear with a stronger red accent, making hotspots immediately visible.
+
+### Piped Input
+`git diff | gh-like-diff` renders a diff read from stdin. Nothing is taken from the current
+directory in this mode — the patch may describe a tree this machine does not have — so the
+context-expand controls are omitted rather than filled with unrelated local files.
+
+### Line Ending and Whitespace Signals
+A change that only touches the end of a line is otherwise invisible, because the two sides
+render identically. Both are marked:
+
+- `\` where a file has no trailing newline
+- `CRLF` where the two sides disagree on line endings, and only where they disagree — a
+  file that is CRLF throughout stays unmarked
+
+### Configuration File
+Put a `.gh-like-diffrc` beside your project (or in `$HOME`) to stop retyping flags:
+
+```json
+{
+  "style": "line",
+  "colorScheme": "dark",
+  "context": 8,
+  "ignore": ["*.meta", "*.asset"],
+  "singleView": false,
+  "noOpen": false
+}
+```
+
+The nearest file wins, walking up from the working directory and falling back to
+`~/.gh-like-diffrc`; only one file is read, so it is always clear where a setting came from.
+Command-line flags override it, and the path in use is printed in the summary. Unknown or
+malformed options are reported as warnings and skipped rather than aborting the run.
+
+Options that select **what** to diff — refs, `--staged`, `-f` — are deliberately not
+configurable: a file that silently changed the comparison would be far more surprising than
+one that changes appearance.
+
+### Output Size
+Both views are rendered so the in-page Unified/Split toggle works without a round trip,
+which costs roughly double the bytes. Measured on 50 files / 20,000 changed lines: 17.25MB
+with both views, 7.42MB with `--single-view`. Generation takes about half a second either
+way, and the page loads in well under a second.
+
+Use `--single-view` when the file is going to be emailed or archived; keep the default when
+the reader will want to flip between views.
 
 ### Self-Contained HTML Output
 The generated HTML file includes all CSS and JavaScript inlined — zero external dependencies, zero network requests. Open it from `file://`, share it on Slack, archive it as a build artifact. It just works, months later, on any machine.
@@ -95,6 +184,9 @@ const html = generate(diffString, {
   outputFormat: 'side-by-side',
   colorScheme: 'dark',
   title: 'My Review',
+  // Optional: full contents of each changed file, keyed by path. Required for the
+  // context-expand controls — without it they are omitted instead of rendered inert.
+  fileContents: { 'src/utils.ts': sourceLines },
 });
 
 // Render just the diff HTML fragment (for embedding)
@@ -149,6 +241,13 @@ gh-like-diff --no-open
 
 # Output parsed diff as JSON (for piping to other tools)
 gh-like-diff --json
+
+# Render only the selected view (about half the file size, no in-page view toggle)
+gh-like-diff --single-view
+
+# Read a diff from stdin — no repository required
+git diff | gh-like-diff
+gh-like-diff < saved.patch
 
 # Output HTML fragment only (for embedding in existing pages)
 gh-like-diff --embed

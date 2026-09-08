@@ -4,23 +4,24 @@ export function getContextExpandScript(): string {
   window.__gld = window.__gld || {};
   var EXPAND_STEP = 20;
 
-  function escHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // Parsed once: re-parsing the whole diff plus every file body on each arrow click made
+  // repeated expansion visibly stutter on large diffs.
+  var sourcesCache = null;
+  function getSources() {
+    if (sourcesCache) return sourcesCache;
+    var el = document.getElementById('gp-file-sources');
+    try { sourcesCache = el ? JSON.parse(el.textContent) : {}; } catch (e) { sourcesCache = {}; }
+    return sourcesCache;
   }
 
   function getFilePath(fileIdx) {
-    var dataEl = document.getElementById('gp-diff-data');
-    if (!dataEl) return null;
-    var data = JSON.parse(dataEl.textContent);
-    var file = data.files[fileIdx];
-    return file ? (file.newName || file.oldName) : null;
+    var file = document.getElementById('gp-file-' + fileIdx);
+    return file ? file.dataset.filePath : null;
   }
 
   function getFileLines(path) {
-    var el = document.getElementById('gp-file-sources');
-    if (!el) return null;
-    var sources = JSON.parse(el.textContent);
-    return sources[path] || null;
+    var sources = getSources();
+    return (path && sources[path]) || null;
   }
 
   function buildContextRows(oldStart, newStart, count, lines, isSide, fileIdx) {
@@ -29,15 +30,18 @@ export function getContextExpandScript(): string {
     for (var i = 0; i < count; i++) {
       var newNum = newStart + i;
       var oldNum = oldStart + i;
-      var content = escHtml(lines[newNum - 1] || '');
+      // Already highlighted and escaped by the server; escaping again would print tags.
+      var content = lines[newNum - 1] || '';
       if (isSide) {
-        html += '<tr class="gp-ctx">' +
+        // Same .gp-code-inner wrapper the server-rendered rows use, so expanded lines
+        // scroll and wrap identically instead of overflowing into the other pane.
+        html += '<tr class="gp-ctx gp-expanded">' +
           '<td class="gp-ln gp-ctx" ' + fi + ' data-ln="' + oldNum + '" data-side="L">' + oldNum + '</td>' +
-          '<td class="gp-code gp-ctx">' + content + '</td>' +
+          '<td class="gp-code gp-ctx"><div class="gp-code-inner">' + content + '</div></td>' +
           '<td class="gp-ln gp-ctx" ' + fi + ' data-ln="' + newNum + '" data-side="R">' + newNum + '</td>' +
-          '<td class="gp-code gp-ctx">' + content + '</td></tr>';
+          '<td class="gp-code gp-ctx"><div class="gp-code-inner">' + content + '</div></td></tr>';
       } else {
-        html += '<tr class="gp-ctx">' +
+        html += '<tr class="gp-ctx gp-expanded">' +
           '<td class="gp-ln" ' + fi + ' data-ln="' + newNum + '" data-side="R">' + newNum + '</td>' +
           '<td class="gp-ln" ' + fi + ' data-ln="' + oldNum + '" data-side="L">' + oldNum + '</td>' +
           '<td class="gp-code"><span class="gp-prefix"> </span>' + content + '</td></tr>';
@@ -83,17 +87,21 @@ export function getContextExpandScript(): string {
     row.dataset.oldEnd = String(oldEnd);
     var labelEl = row.querySelector('.gp-expand-label .gp-hunk-text');
     if (labelEl) {
-      labelEl.textContent = remaining + ' hidden lines';
+      labelEl.textContent = remaining + ' hidden line' + (remaining === 1 ? '' : 's');
     }
   }
 
   function removeGap(row) {
     var gapId = row.dataset && row.dataset.gapId;
     if (gapId) {
-      var hunk = document.querySelector('.gp-hunk[data-gap-id="' + gapId + '"]');
+      // Scoped to this table: gap ids used to collide between the unified and
+      // side-by-side copies, so expanding one view hid the other view's hunk header.
+      var table = row.closest('.gp-diff-table');
+      var hunk = (table || document).querySelector('.gp-hunk[data-gap-id="' + gapId + '"]');
       if (hunk) hunk.style.display = 'none';
     }
     row.remove();
+    window.__gld.notifyLayoutChanged();
   }
 
   function resolveEof(row, lines) {
@@ -124,9 +132,13 @@ export function getContextExpandScript(): string {
     return { row: row, lines: lines, r: r, isSide: isSide };
   }
 
-  // --- Expand functions (GitHub-style: ▲ shows top, ▼ shows bottom) ---
+  // --- Expand functions ---
+  // GitHub convention: the arrow points toward the diff, and each direction reveals lines
+  // contiguous with the end of the gap it starts from. Previously both arrows were mapped
+  // the other way round, so the only control on the first gap revealed the top of the
+  // file rather than the lines immediately above the hunk.
 
-  // ▲ click — show the TOP of the hidden range (rows go ABOVE the expand row).
+  // \u25b2 walks up from the bottom of the gap: the lines just before the following hunk.
   window.__gld.expandUp = function(btn) {
     var ctx = getExpandContext(btn);
     if (!ctx) return;
@@ -134,17 +146,21 @@ export function getContextExpandScript(): string {
     var total = r.newEnd - r.newStart + 1;
 
     if (total <= EXPAND_STEP) {
-      var html = buildContextRows(r.oldStart, r.newStart, total, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
-      insertRowsBefore(ctx.row, html);
+      var all = buildContextRows(r.oldStart, r.newStart, total, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+      insertRowsAfter(ctx.row, all);
       removeGap(ctx.row);
-    } else {
-      var html = buildContextRows(r.oldStart, r.newStart, EXPAND_STEP, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
-      insertRowsBefore(ctx.row, html);
-      syncGapData(ctx.row, r.newStart + EXPAND_STEP, r.newEnd, r.oldStart + EXPAND_STEP, r.oldEnd);
+      return;
     }
+    var count = EXPAND_STEP;
+    var newStart = r.newEnd - count + 1;
+    var oldStart = r.oldEnd - count + 1;
+    var html = buildContextRows(oldStart, newStart, count, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+    insertRowsAfter(ctx.row, html);
+    syncGapData(ctx.row, r.newStart, newStart - 1, r.oldStart, oldStart - 1);
+    window.__gld.notifyLayoutChanged();
   };
 
-  // ▼ click — show the BOTTOM of the hidden range (rows go BELOW the expand row).
+  // \u25bc walks down from the top of the gap: the lines just after the preceding hunk.
   window.__gld.expandDown = function(btn) {
     var ctx = getExpandContext(btn);
     if (!ctx) return;
@@ -152,17 +168,15 @@ export function getContextExpandScript(): string {
     var total = r.newEnd - r.newStart + 1;
 
     if (total <= EXPAND_STEP) {
-      var html = buildContextRows(r.oldStart, r.newStart, total, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
-      insertRowsAfter(ctx.row, html);
+      var all = buildContextRows(r.oldStart, r.newStart, total, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+      insertRowsBefore(ctx.row, all);
       removeGap(ctx.row);
-    } else {
-      var count = EXPAND_STEP;
-      var expandNewStart = r.newEnd - count + 1;
-      var expandOldStart = r.oldEnd - count + 1;
-      var html = buildContextRows(expandOldStart, expandNewStart, count, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
-      insertRowsAfter(ctx.row, html);
-      syncGapData(ctx.row, r.newStart, expandNewStart - 1, r.oldStart, expandOldStart - 1);
+      return;
     }
+    var html = buildContextRows(r.oldStart, r.newStart, EXPAND_STEP, ctx.lines, ctx.isSide, ctx.row.dataset.fileIdx);
+    insertRowsBefore(ctx.row, html);
+    syncGapData(ctx.row, r.newStart + EXPAND_STEP, r.newEnd, r.oldStart + EXPAND_STEP, r.oldEnd);
+    window.__gld.notifyLayoutChanged();
   };
 
   window.__gld.expandAll = function(btn) {

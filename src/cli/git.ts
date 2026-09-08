@@ -87,8 +87,29 @@ export interface DiffStats {
 
 const MAX_FILE_SIZE = 500 * 1024; // 500KB limit per file
 
+/**
+ * Which revision the "+" side of the diff refers to.
+ *
+ * Context expansion must read that revision, not whatever happens to be checked out —
+ * `gh-like-diff HEAD~5..HEAD~3` used to expand into the current working tree and present
+ * unrelated code with line numbers that looked consistent.
+ *
+ * Returns `null` when the new side really is the working tree.
+ */
+export function resolveNewSideRef(options: { staged?: boolean; refs?: string[] } = {}): string | null {
+  const refs = options.refs || [];
+  for (const ref of refs) {
+    const m = /^(.*?)(\.{2,3})(.*)$/.exec(ref);
+    if (m) return m[3] ? m[3] : 'HEAD';
+  }
+  // A single ref (`git diff HEAD~1`) still compares against the working tree.
+  if (refs.length > 0) return null;
+  return options.staged ? '' : null;
+}
+
 export function getNewFileContents(
   files: { newName: string; oldName: string; isDeleted?: boolean }[],
+  ref: string | null = null,
 ): Record<string, string[]> {
   let repoRoot: string;
   try {
@@ -97,22 +118,35 @@ export function getNewFileContents(
     return {};
   }
 
+  const readFromGit = (path: string): string | null => {
+    // `git show :path` reads the index, `git show <rev>:path` a commit. When the new side
+    // is the working tree there is no revision, so fall back to HEAD — `null:path` is not
+    // a ref and would guarantee the lookup fails.
+    const spec = ref === null ? `HEAD:${path}` : `${ref}:${path}`;
+    const r = spawnSync('git', ['show', spec], { encoding: 'utf-8', maxBuffer: MAX_FILE_SIZE });
+    return r.status === 0 && typeof r.stdout === 'string' ? r.stdout : null;
+  };
+
   const result: Record<string, string[]> = {};
   for (const file of files) {
     if (file.isDeleted) continue;
     const path = file.newName || file.oldName;
-    if (!path) continue;
+    if (!path || path === '/dev/null') continue;
     try {
-      const fullPath = join(repoRoot, path);
-      const content = readFileSync(fullPath, 'utf-8');
-      if (content.length <= MAX_FILE_SIZE) {
+      let content: string | null;
+      if (ref === null) {
+        content = readFileSync(join(repoRoot, path), 'utf-8');
+      } else {
+        content = readFromGit(path);
+      }
+      if (content !== null && content.length <= MAX_FILE_SIZE) {
         result[path] = content.split('\n');
       }
     } catch {
       try {
-        const r = spawnSync('git', ['show', `HEAD:${path}`], { encoding: 'utf-8', maxBuffer: MAX_FILE_SIZE });
-        if (r.status === 0 && r.stdout) {
-          result[path] = r.stdout.split('\n');
+        const fallback = readFromGit(path);
+        if (fallback !== null && fallback.length <= MAX_FILE_SIZE) {
+          result[path] = fallback.split('\n');
         }
       } catch {
         // Skip
