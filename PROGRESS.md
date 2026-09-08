@@ -94,6 +94,18 @@ CSS巻き添え削除を検出する `chrome-integrity.spec.ts` を新設
 
 **テスト:** 単体228 + E2E141×3ブラウザ
 
+### Phase 11: 設定ファイルと公開準備
+- **`.gh-like-diffrc`** — style / colorScheme / context / ignore / singleView / noOpen。
+  commander の `getOptionValueSource` で「CLIで明示指定したか」を判定しないと
+  設定ファイルが既定値に常に負けるため、そこを起点に優先順位を実装
+- 不正な設定は**警告して読み飛ばす**（差分が読めなくなる方が困る）。
+  未知キーもタイポ検出のため警告する。適用元のパスはサマリに表示
+- **公開準備** — CHANGELOG.md、sourcemap 除外、`prepublishOnly`。
+  `npm pack --dry-run --json` の結果をテストで検証し、src/tests/PROGRESS.md の
+  混入と .map の同梱を防ぐ
+
+**テスト:** 単体262 + E2E141×3ブラウザ
+
 ---
 
 ## Known Issues
@@ -110,11 +122,14 @@ CSS巻き添え削除を検出する `chrome-integrity.spec.ts` を新設
 ### Should Fix (v1.0.x)
 
 - [x] ~~**シンタックスハイライト**~~ — highlight.js によるサーバーサイドハイライト実装済み
-- [ ] **`.gh-like-diffrc` 設定ファイル** — デフォルト設定の読み込み
+- [x] ~~**`.gh-like-diffrc` 設定ファイル**~~ — 最寄り優先で1ファイルのみ読む。
+      CLI > 設定ファイル > 既定値。「何を diff するか」(refs/--staged/-f) は意図的に対象外
 - [x] ~~**GitHub Actions CI**~~ — unit(node 18/20/22) + e2e(chromium/firefox/webkit) を
   concurrency・job/step タイムアウト・失敗時のレポート回収付きで自動化。
   npm publish ワークフローは未着手
-- [ ] **npm publish 準備** — npm上の名前空間確認、CHANGELOG.md の作成
+- [x] ~~**npm publish 準備**~~ — CHANGELOG.md 作成、sourcemap を公開物から除外
+      （283kB → 131kB / 展開後 1.2MB → 529kB）、`prepublishOnly` で typecheck+test+build。
+      **npm 上の名前空間確認は未実施**（要ユーザー対応）
 - [x] ~~**stdin/パイプ入力**~~ — `git diff | gh-like-diff` に対応。リポジトリ外でも動作する
 - [x] ~~**ARIA属性**~~ — semantic HTML、ARIA roles/labels、スキップリンク実装済み
 

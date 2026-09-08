@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import type { FileConfig } from './config.js';
 
 export interface CliOptions {
   style: 'side' | 'line';
@@ -15,7 +16,12 @@ export interface CliOptions {
   refs: string[];
 }
 
-export function parseArgs(argv: string[]): CliOptions {
+/**
+ * Precedence is CLI > config file > built-in default. Commander reports where each value
+ * came from, which is the only way to tell "the user asked for side-by-side" apart from
+ * "side-by-side is the default" — without it a config file could never win.
+ */
+export function parseArgs(argv: string[], fileConfig: FileConfig = {}): CliOptions {
   const program = new Command();
 
   program
@@ -38,20 +44,34 @@ export function parseArgs(argv: string[]): CliOptions {
 
   const opts = program.opts();
   const refs = program.args;
-  const context = parseInt(opts.context, 10);
+  const fromCli = (name: string) => program.getOptionValueSource(name) === 'cli';
+
+  const style = fromCli('style') || fileConfig.style === undefined
+    ? (opts.style === 'line' ? 'line' : 'side')
+    : fileConfig.style;
+
+  const parsedContext = parseInt(opts.context, 10);
+  const context = fromCli('context') || fileConfig.context === undefined
+    ? (Number.isNaN(parsedContext) ? 3 : parsedContext)
+    : fileConfig.context;
+
+  const colorScheme = fromCli('colorScheme') || fileConfig.colorScheme === undefined
+    ? (opts.colorScheme || 'auto')
+    : fileConfig.colorScheme;
 
   return {
-    style: opts.style === 'line' ? 'line' : 'side',
+    style,
     staged: opts.staged,
     file: opts.file,
-    context: Number.isNaN(context) ? 3 : context,
+    context,
     save: opts.save,
-    noOpen: opts.open === false,
+    // --no-open is a negated flag, so commander reports it under "open".
+    noOpen: opts.open === false || (!fromCli('open') && fileConfig.noOpen === true),
     json: opts.json,
     embed: opts.embed,
-    singleView: opts.singleView,
-    ignore: opts.ignore || [],
-    colorScheme: opts.colorScheme || 'auto',
+    singleView: opts.singleView || (!fromCli('singleView') && fileConfig.singleView === true),
+    ignore: opts.ignore || fileConfig.ignore || [],
+    colorScheme,
     refs,
   };
 }

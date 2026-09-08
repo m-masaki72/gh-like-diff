@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, mkdtempSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -63,5 +63,39 @@ describe.skipIf(!built)('CLI with piped input', () => {
     const res = runPiped(DIFF, ['--embed']);
     expect(res.status).toBe(0);
     expect(res.stdout).not.toContain('__gld.expandUp(this)');
+  });
+});
+
+describe.skipIf(!built)('CLI with a config file', () => {
+  it('applies .gh-like-diffrc and says where it came from', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gld-cfg-'));
+    writeFileSync(join(dir, '.gh-like-diffrc'), JSON.stringify({ style: 'line' }));
+    const res = spawnSync(process.execPath, [CLI, '--no-open'], {
+      input: DIFF, encoding: 'utf-8', cwd: dir,
+    });
+    expect(res.status).toBe(0);
+    // Printed rather than applied silently, so a surprising default is traceable.
+    expect(res.stdout).toContain('unified');
+    expect(res.stdout).toContain('.gh-like-diffrc');
+  });
+
+  it('lets the command line override the config file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gld-cfg-'));
+    writeFileSync(join(dir, '.gh-like-diffrc'), JSON.stringify({ style: 'line' }));
+    const res = spawnSync(process.execPath, [CLI, '--no-open', '-s', 'side'], {
+      input: DIFF, encoding: 'utf-8', cwd: dir,
+    });
+    expect(res.stdout).toContain('side-by-side');
+  });
+
+  it('warns about a broken config but still renders', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gld-cfg-'));
+    writeFileSync(join(dir, '.gh-like-diffrc'), '{ broken');
+    const res = spawnSync(process.execPath, [CLI, '--no-open'], {
+      input: DIFF, encoding: 'utf-8', cwd: dir,
+    });
+    expect(res.status).toBe(0);
+    expect(res.stderr).toContain('could not parse');
+    expect(res.stdout).toContain('Generated:');
   });
 });

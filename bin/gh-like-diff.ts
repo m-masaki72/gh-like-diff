@@ -1,4 +1,5 @@
 import { parseArgs } from '../src/cli/args.js';
+import { loadConfig, CONFIG_FILENAME } from '../src/cli/config.js';
 import { getGitInfo, getGitDiff, getNewFileContents, resolveNewSideRef } from '../src/cli/git.js';
 import { resolveOutputPath, writeOutput, openInBrowser, printSummary } from '../src/cli/output.js';
 import { hasPipedInput, readStdin } from '../src/cli/stdin.js';
@@ -8,7 +9,11 @@ import { renderDiff } from '../src/core/renderer.js';
 
 function main() {
   try {
-  const options = parseArgs(process.argv);
+  const { config, path: configPath, warnings } = loadConfig();
+  for (const warning of warnings) {
+    console.error(`\x1b[0;33m${CONFIG_FILENAME}: ${warning}\x1b[0m`);
+  }
+  const options = parseArgs(process.argv, config);
 
   // A piped diff is self-contained: it may come from another machine, a saved patch or a
   // tool that is not git at all, so neither a repository nor git itself is required.
@@ -97,6 +102,7 @@ function main() {
     additions: parsed.stats.totalAdditions,
     deletions: parsed.stats.totalDeletions,
     style: options.style === 'side' ? 'side-by-side' : 'unified',
+    configPath,
     outputPath,
   });
 

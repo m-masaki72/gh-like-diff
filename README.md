@@ -118,6 +118,29 @@ render identically. Both are marked:
 - `CRLF` where the two sides disagree on line endings, and only where they disagree — a
   file that is CRLF throughout stays unmarked
 
+### Configuration File
+Put a `.gh-like-diffrc` beside your project (or in `$HOME`) to stop retyping flags:
+
+```json
+{
+  "style": "line",
+  "colorScheme": "dark",
+  "context": 8,
+  "ignore": ["*.meta", "*.asset"],
+  "singleView": false,
+  "noOpen": false
+}
+```
+
+The nearest file wins, walking up from the working directory and falling back to
+`~/.gh-like-diffrc`; only one file is read, so it is always clear where a setting came from.
+Command-line flags override it, and the path in use is printed in the summary. Unknown or
+malformed options are reported as warnings and skipped rather than aborting the run.
+
+Options that select **what** to diff — refs, `--staged`, `-f` — are deliberately not
+configurable: a file that silently changed the comparison would be far more surprising than
+one that changes appearance.
+
 ### Output Size
 Both views are rendered so the in-page Unified/Split toggle works without a round trip,
 which costs roughly double the bytes. Measured on 50 files / 20,000 changed lines: 17.25MB
