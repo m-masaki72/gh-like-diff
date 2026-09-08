@@ -1180,5 +1180,8 @@ body.gp-wrap .gp-unified-wrapper .gp-diff-table .gp-ln { position: static; }
   background: var(--gld-canvas-subtle);
   white-space: nowrap;
 }
+
+/* The icon sprite is a definitions block, not content. */
+.gp-icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 `;
 }

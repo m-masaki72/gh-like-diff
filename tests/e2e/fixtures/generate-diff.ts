@@ -116,8 +116,8 @@ index 1111111..2222222 100644
 --- a/src/long.ts
 +++ b/src/long.ts
 @@ -1,2 +1,2 @@
--const url = "x";
-+const url = "${long}";
+-const url = "${long}a";
++const url = "${long}b";
  const short = 1;
 diff --git a/src/unicode.ts b/src/unicode.ts
 index 1111111..2222222 100644
@@ -145,7 +145,7 @@ index 1111111..2222222 100644
     'src/win.ts': ['const a = 1;', 'const b = 2;'],
     'src/deep/nested/module.ts': Array.from({ length: 300 }, (_, i) => `  const nested_${i + 1} = ${i + 1};`),
     'README.md': ['line1', 'line2 changed'],
-    'src/long.ts': [`const url = "${long}";`, 'const short = 1;'],
+    'src/long.ts': [`const url = "${long}b";`, 'const short = 1;'],
     'src/unicode.ts': ['const emoji = "🎊 done";', 'const tail = 1;'],
   };
   return { diff: diff + crlfSection, sources };

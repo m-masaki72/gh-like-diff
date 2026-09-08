@@ -1,6 +1,7 @@
 import type { DiffFile, DiffBlock, DiffLine } from 'diff2html/lib/types';
 import { LineType } from 'diff2html/lib/types';
 import { detectLanguage, highlightLine } from './highlighter.js';
+import { icon } from './icons.js';
 
 export interface RenderOptions {
   outputFormat: 'side-by-side' | 'line-by-line';
@@ -230,9 +231,9 @@ function renderExpandRow(
   // two never matched and the stale @@ header was never hidden.
   const gapId = `${fileIndex}-${gapIndex}`;
   const data = `data-file-idx="${fileIndex}" data-gap-id="${gapId}" data-old-start="${oldStart}" data-old-end="${oldEnd}" data-new-start="${newStart}" data-new-end="${newEnd}"`;
-  const upBtn = `<button class="gp-expand-arrow gp-expand-arrow-up" aria-label="Expand up toward the hunk below" title="Expand up (lines just above the next hunk)" onclick="window.__gld.expandUp(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4.427 9.573a.25.25 0 0 0 .177.427h6.792a.25.25 0 0 0 .177-.427L8.177 6.177a.25.25 0 0 0-.354 0Z"/></svg></button>`;
-  const allBtn = `<button class="gp-expand-arrow gp-expand-arrow-all" aria-label="Show all hidden lines" title="Show all hidden lines" onclick="window.__gld.expandAll(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8.177 14.323l2.896-2.896a.25.25 0 0 0-.177-.427H8.75V5h2.146a.25.25 0 0 0 .177-.427L8.177 1.677a.25.25 0 0 0-.354 0L4.927 4.573a.25.25 0 0 0 .177.427H7.25v6h-2.146a.25.25 0 0 0-.177.427l2.896 2.896a.25.25 0 0 0 .354 0z"/></svg></button>`;
-  const downBtn = `<button class="gp-expand-arrow gp-expand-arrow-down" aria-label="Expand down from the hunk above" title="Expand down (lines just below the previous hunk)" onclick="window.__gld.expandDown(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4.427 6.427a.25.25 0 0 1 .177-.427h6.792a.25.25 0 0 1 .177.427L8.177 9.823a.25.25 0 0 1-.354 0Z"/></svg></button>`;
+  const upBtn = `<button class="gp-expand-arrow gp-expand-arrow-up" aria-label="Expand up toward the hunk below" title="Expand up (lines just above the next hunk)" onclick="window.__gld.expandUp(this)">${icon('arrow-up')}</button>`;
+  const allBtn = `<button class="gp-expand-arrow gp-expand-arrow-all" aria-label="Show all hidden lines" title="Show all hidden lines" onclick="window.__gld.expandAll(this)">${icon('arrow-both')}</button>`;
+  const downBtn = `<button class="gp-expand-arrow gp-expand-arrow-down" aria-label="Expand down from the hunk above" title="Expand down (lines just below the previous hunk)" onclick="window.__gld.expandDown(this)">${icon('arrow-down')}</button>`;
   // side-by-side renders 4 cells so table-layout: fixed can derive consistent column widths
   // from every row (including expand rows). The unified view keeps the 2-cell colspan layout.
   if (colspan === 4) {
@@ -250,7 +251,7 @@ function renderExpandRow(
 }
 
 function renderHunkCopyBtn(): string {
-  return `<button class="gp-hunk-copy-btn" onclick="window.__gld.copyHunk(this)" title="Copy hunk code"><svg class="gp-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25ZM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg><svg class="gp-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="display:none"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></button>`;
+  return `<button class="gp-hunk-copy-btn" onclick="window.__gld.copyHunk(this)" title="Copy hunk code">${icon('copy', { className: 'gp-copy-icon', size: 14 })}${icon('check', { className: 'gp-check-icon', size: 14, style: 'display:none' })}</button>`;
 }
 
 // --- Line-by-line (Unified) ---
@@ -509,16 +510,16 @@ function renderFileCard(file: DiffFile, fileIndex: number, options: RenderOption
 <div class="gp-file" id="gp-file-${fileIndex}" data-file-index="${fileIndex}" data-file-hash="${fHash}" data-file-path="${esc(copyName)}">
   <div class="gp-file-header">
     <button class="gp-chevron-btn" onclick="window.__gld.toggleFile(${fileIndex})" aria-label="Toggle file" aria-expanded="true" aria-controls="gp-file-body-${fileIndex}" title="Toggle file">
-      <svg class="gp-chevron-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.94l3.72-3.72a.749.749 0 0 1 1.06 0Z"/></svg>
+      ${icon('chevron', { className: 'gp-chevron-icon' })}
     </button>
     <span class="gp-file-tag ${tag.cls}">${tag.label}</span>
     <span class="gp-file-header-name gp-file-header-clickable" onclick="window.__gld.toggleFile(${fileIndex})">${esc(name)}</span>
     <button class="gp-copy-btn" data-clipboard="${esc(copyName)}" onclick="window.__gld.copyFileName(this)" title="Copy file path">
-      <svg class="gp-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25ZM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
-      <svg class="gp-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" style="display:none"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+      ${icon('copy', { className: 'gp-copy-icon' })}
+      ${icon('check', { className: 'gp-check-icon', style: 'display:none' })}
     </button>
     ${sideContent ? `<button class="gp-copy-btn gp-copy-new-btn" onclick="window.__gld.copyNewSide(${fileIndex})" title="Copy the new-side code of this file" aria-label="Copy new side">
-      <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3.75 1.5a.25.25 0 0 0-.25.25v11.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V6H9.75A1.75 1.75 0 0 1 8 4.25V1.5Zm5.75.56v2.19c0 .138.112.25.25.25h2.19ZM2 1.75C2 .784 2.784 0 3.75 0h5.086c.464 0 .909.184 1.237.513l3.414 3.414c.329.328.513.773.513 1.237v8.086A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25Z"/></svg>
+      ${icon('file')}
     </button>` : ''}
     <div class="gp-file-header-stats">
       ${file.addedLines > 0 ? `<span class="gp-stats-add">+${file.addedLines}</span>` : ''}
@@ -570,8 +571,8 @@ function renderTreeNode(node: TreeNode, maxChanges: number, depth: number, files
     const dirPath = prefix + dirName;
     html += `<div class="gp-tree-dir" data-dir="${esc(dirPath)}" style="padding-left:${pad}px">
   <button class="gp-tree-toggle" aria-expanded="true" onclick="window.__gld.toggleDir(this)">
-    <svg class="gp-tree-chevron" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L10.19 8 6.22 4.03a.75.75 0 0 1 0-1.06Z"/></svg>
-    <svg class="gp-tree-folder" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M.513 1.513A1.75 1.75 0 0 1 1.75 1h3.5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.5A1.75 1.75 0 0 1 16 4.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75c0-.464.184-.91.513-1.237Z"/></svg>
+    ${icon('tree-chevron', { className: 'gp-tree-chevron', size: 12 })}
+    ${icon('folder', { className: 'gp-tree-folder', size: 14 })}
     <span class="gp-tree-dir-name">${esc(dirName)}</span>
   </button>
 </div>`;

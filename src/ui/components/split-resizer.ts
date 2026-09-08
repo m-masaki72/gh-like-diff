@@ -99,6 +99,30 @@ export function getSplitResizerScript(): string {
       window.__gld.resetSplit();
     }
   });
+
+  // Each code cell scrolls on its own, so comparing a long line meant scrolling the left
+  // cell and then hunting for the same offset on the right. Scrolling either one now moves
+  // its partner by the same amount. Only the two cells of one row are touched, so this
+  // stays cheap however many rows the file has.
+  var syncing = false;
+  document.addEventListener('scroll', function(e) {
+    if (syncing) return;
+    var cell = e.target;
+    if (!cell || !cell.classList || !cell.classList.contains('gp-code-inner')) return;
+    var row = cell.closest('tr');
+    if (!row) return;
+
+    var partners = row.querySelectorAll('.gp-code-inner');
+    if (partners.length < 2) return;
+    syncing = true;
+    for (var i = 0; i < partners.length; i++) {
+      if (partners[i] !== cell && partners[i].scrollLeft !== cell.scrollLeft) {
+        partners[i].scrollLeft = cell.scrollLeft;
+      }
+    }
+    // Released on the next frame: assigning scrollLeft fires scroll events of its own.
+    requestAnimationFrame(function() { syncing = false; });
+  }, true);
 })();
 `;
 }

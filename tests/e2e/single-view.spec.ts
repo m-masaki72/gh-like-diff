@@ -81,3 +81,52 @@ test.describe('Single-view pages', () => {
     await expect(page.locator('#gp-minimap canvas')).toHaveCount(1);
   });
 });
+
+test.describe('Side-by-side horizontal scroll', () => {
+  test('scrolling one cell moves its partner by the same amount', async ({ page, edgeCasePageUrl }) => {
+    await page.goto(edgeCasePageUrl);
+    const row = page.locator('.gp-file').filter({ hasText: 'long.ts' })
+      .locator('.gp-view-side tr').filter({ hasText: 'const url' }).first();
+
+    const cells = row.locator('.gp-code-inner');
+    expect(await cells.count()).toBe(2);
+    // Both sides overflow: that is the case worth syncing, a long line changed slightly.
+    const overflow = await cells.evaluateAll(els => els.map(el => el.scrollWidth > el.clientWidth));
+    expect(overflow).toEqual([true, true]);
+
+    await cells.first().evaluate(el => { el.scrollLeft = 250; });
+    await page.waitForTimeout(300);
+
+    const after = await cells.evaluateAll(els => els.map(el => el.scrollLeft));
+    // Comparing the two used to mean scrolling each side to the same offset by hand.
+    expect(after[0]).toBeGreaterThan(0);
+    expect(after[1]).toBe(after[0]);
+  });
+
+  test('syncs in the other direction too', async ({ page, edgeCasePageUrl }) => {
+    await page.goto(edgeCasePageUrl);
+    const cells = page.locator('.gp-file').filter({ hasText: 'long.ts' })
+      .locator('.gp-view-side tr').filter({ hasText: 'const url' }).first()
+      .locator('.gp-code-inner');
+
+    await cells.nth(1).evaluate(el => { el.scrollLeft = 180; });
+    await page.waitForTimeout(300);
+    const after = await cells.evaluateAll(els => els.map(el => el.scrollLeft));
+    expect(after[1]).toBeGreaterThan(0);
+    expect(after[0]).toBe(after[1]);
+  });
+
+  test('leaves the other rows where they were', async ({ page, edgeCasePageUrl }) => {
+    await page.goto(edgeCasePageUrl);
+    const file = page.locator('.gp-file').filter({ hasText: 'long.ts' });
+    await file.locator('.gp-view-side tr').filter({ hasText: 'const url' }).first()
+      .locator('.gp-code-inner').first().evaluate(el => { el.scrollLeft = 250; });
+    await page.waitForTimeout(300);
+
+    // Only the row the user touched moves. Syncing the whole file would be surprising and,
+    // on a large diff, expensive.
+    const moved = await file.locator('.gp-view-side .gp-code-inner')
+      .evaluateAll(els => els.filter(el => el.scrollLeft > 0).length);
+    expect(moved).toBe(2);
+  });
+});

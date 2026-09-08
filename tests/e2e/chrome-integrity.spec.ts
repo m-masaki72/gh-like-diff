@@ -184,3 +184,41 @@ test.describe('Expanded context', () => {
     expect(text).toContain('const');
   });
 });
+
+test.describe('Icons', () => {
+  test('every icon on screen actually renders', async ({ page, diffPageUrl }) => {
+    await page.goto(diffPageUrl);
+    // A <use> pointing at a missing symbol produces an element with no drawn content, so
+    // measuring the box is the only way to tell a working sprite from a broken one.
+    const blank = await page.evaluate(() => {
+      const view = document.querySelector('.gp-view-side')!;
+      const icons = [...document.querySelectorAll('.gp-toolbar svg'), ...view.querySelectorAll('svg')]
+        // The copy-success tick starts hidden and is swapped in on click, so it has no box.
+        .filter(el => getComputedStyle(el).display !== 'none');
+      const sizes = icons.map(el => {
+        const r = el.getBoundingClientRect();
+        return { cls: el.getAttribute('class') || '(none)', w: Math.round(r.width), h: Math.round(r.height) };
+      });
+      return { total: sizes.length, blank: sizes.filter(s => s.w === 0 || s.h === 0) };
+    });
+    expect(blank.total).toBeGreaterThan(5);
+    expect(blank.blank).toEqual([]);
+  });
+
+  test('the sprite itself takes up no space', async ({ page, diffPageUrl }) => {
+    await page.goto(diffPageUrl);
+    const box = await page.locator('.gp-icon-sprite').evaluate(el => {
+      const r = el.getBoundingClientRect();
+      return { w: r.width, h: r.height };
+    });
+    expect(box).toEqual({ w: 0, h: 0 });
+  });
+
+  test('icons inherit the text colour', async ({ page, diffPageUrl }) => {
+    await page.goto(diffPageUrl);
+    // fill="currentColor" on the symbol is what keeps them themed.
+    const fill = await page.locator('.gp-chevron-icon').first()
+      .evaluate(el => getComputedStyle(el).fill);
+    expect(fill).not.toBe('none');
+  });
+});
