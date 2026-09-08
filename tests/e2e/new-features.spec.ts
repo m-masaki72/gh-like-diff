@@ -150,15 +150,30 @@ test.describe('Syntax Highlighting', () => {
     expect(await hljsSpans.count()).toBeGreaterThan(0);
   });
 
-  test('word-diff lines do not mix with syntax highlighting', async ({ page, unifiedDiffPageUrl }) => {
+  test('changed lines keep syntax highlighting under the word-diff marker', async ({ page, unifiedDiffPageUrl }) => {
     await page.goto(unifiedDiffPageUrl);
-    const wordDiffCells = page.locator('.gp-view-unified .gp-word-add, .gp-view-unified .gp-word-del');
-    const count = await wordDiffCells.count();
-    for (let i = 0; i < Math.min(count, 5); i++) {
-      const cell = wordDiffCells.nth(i);
-      const parent = cell.locator('xpath=ancestor::td[contains(@class,"gp-code")]');
-      const hljsInParent = await parent.locator('[class^="hljs-"]').count();
-      expect(hljsInParent).toBe(0);
-    }
+    // Previously word-diff and highlighting were mutually exclusive, so the lines the
+    // reviewer most wants to read were the only plain-black ones on the page.
+    const stats = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('.gp-view-unified tr')]
+        .filter(r => r.querySelector('.gp-word-add, .gp-word-del'));
+      return {
+        changedRows: rows.length,
+        hljsSpans: rows.reduce((n, r) => n + r.querySelectorAll('[class^="hljs-"]').length, 0),
+      };
+    });
+    expect(stats.changedRows).toBeGreaterThan(0);
+    expect(stats.hljsSpans).toBeGreaterThan(0);
+  });
+
+  test('word-diff markup stays well-formed inside highlighted code', async ({ page, unifiedDiffPageUrl }) => {
+    await page.goto(unifiedDiffPageUrl);
+    const balanced = await page.evaluate(() => {
+      // If the wrapper broke tag nesting the browser would repair it and the marker text
+      // would no longer match the source characters it is supposed to cover.
+      return [...document.querySelectorAll('.gp-word-add, .gp-word-del')]
+        .every(el => el.textContent && el.textContent.length > 0 && el.closest('.gp-code'));
+    });
+    expect(balanced).toBe(true);
   });
 });

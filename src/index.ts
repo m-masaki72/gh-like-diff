@@ -13,6 +13,12 @@ export interface GhLikeDiffOptions {
   repoName?: string;
   branch?: string;
   ignore?: string[];
+  /**
+   * Full contents of each changed file, keyed by path, used by the context-expand
+   * buttons. Without it the expand controls have nothing to reveal, so they are
+   * omitted from the output rather than rendered inert.
+   */
+  fileContents?: Record<string, string[]>;
 }
 
 /**
@@ -43,6 +49,8 @@ export function generate(diffString: string, options: GhLikeDiffOptions = {}): s
     colorScheme: options.colorScheme || 'auto',
     files: parsed.files,
     stats: parsed.stats,
+    fileContents: options.fileContents,
+    noNewline: parsed.noNewline,
   });
 }
 
@@ -53,6 +61,6 @@ export function render(diffString: string, options: GhLikeDiffOptions = {}): str
   const parsed = parseDiff(diffString);
   return renderDiff(parsed.files, {
     outputFormat: options.outputFormat || 'side-by-side',
-    maxLinesBeforeLazy: 500,
+    noNewline: parsed.noNewline,
   });
 }

@@ -8,28 +8,34 @@ export function getCommandPaletteScript(): string {
   var commands = [];
   var filtered = [];
   var selectedIdx = 0;
+  var lastFocus = null;
 
   function buildCommands() {
     commands = [
       { id: 'unified', label: 'Switch to Unified view', section: 'View', fn: function() { window.__gld.switchView('line'); } },
       { id: 'split', label: 'Switch to Split view', section: 'View', fn: function() { window.__gld.switchView('side'); } },
-      { id: 'theme', label: 'Toggle theme (dark/light)', section: 'View', fn: function() { window.__gld.toggleTheme(); } },
-      { id: 'sidebar', label: 'Toggle sidebar', section: 'View', fn: function() { window.__gld.toggleSidebar(); } },
+      { id: 'theme', label: 'Cycle theme (auto/dark/light)', section: 'View', fn: function() { window.__gld.toggleTheme(); } },
+      { id: 'sidebar', label: 'Toggle sidebar', section: 'View', keys: 'b', fn: function() { window.__gld.toggleSidebar(); } },
+      { id: 'wrap', label: 'Toggle line wrapping', section: 'View', keys: 'w', fn: function() { window.__gld.toggleWrap(); } },
+      { id: 'minimap', label: 'Toggle minimap', section: 'View', keys: 'm', fn: function() { window.__gld.toggleMinimap(); } },
       { id: 'search', label: 'Search in diff', section: 'Tools', keys: '/', fn: function() { window.__gld.openSearch(); } },
       { id: 'memos', label: 'Toggle memo panel', section: 'Tools', fn: function() { window.__gld.toggleMemoPanel(); } },
       { id: 'export', label: 'Export memos to clipboard', section: 'Tools', fn: function() { window.__gld.exportMemos(); } },
-      { id: 'help', label: 'Toggle keyboard shortcuts', section: 'Help', keys: '?', fn: function() { window.__gld.toggleHelp(); } }
+      { id: 'export-md', label: 'Export memos as Markdown', section: 'Tools', fn: function() { window.__gld.exportMemos('markdown'); } },
+      { id: 'unreviewed', label: 'Show only unreviewed files', section: 'Review', fn: function() { window.__gld.toggleUnreviewedOnly(); } },
+      { id: 'next-unreviewed', label: 'Go to next unreviewed file', section: 'Review', keys: 'u', fn: function() { window.__gld.nextUnreviewed(); } },
+      { id: 'reset', label: 'Reset saved state for this diff', section: 'Review', fn: function() { window.__gld.resetState(); } },
+      { id: 'help', label: 'Keyboard shortcuts', section: 'Help', keys: '?', fn: function() { window.__gld.showShortcuts(); } }
     ];
 
-    var files = document.querySelectorAll('.gp-file');
-    files.forEach(function(file, i) {
+    window.__gld.qa('.gp-file', { includeCollapsed: true }).forEach(function(file) {
       var nameEl = file.querySelector('.gp-file-header-name');
-      var name = nameEl ? nameEl.textContent : 'File ' + i;
+      var idx = file.dataset.fileIndex;
       commands.push({
-        id: 'file-' + i,
-        label: name,
+        id: 'file-' + idx,
+        label: nameEl ? nameEl.textContent : 'File ' + idx,
         section: 'Files',
-        fn: function() { window.__gld.navFile(i); }
+        fn: function() { window.__gld.navFile(idx); }
       });
     });
   }
@@ -41,20 +47,31 @@ export function getCommandPaletteScript(): string {
 
     var dialog = document.createElement('div');
     dialog.className = 'gp-palette';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-label', 'Command palette');
 
     input = document.createElement('input');
     input.className = 'gp-palette-input';
     input.placeholder = 'Type a command or file name...';
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-expanded', 'true');
+    input.setAttribute('aria-controls', 'gp-palette-list');
     input.oninput = function() { filter(); render(); };
     input.onkeydown = function(e) {
+      // Arrow keys and Enter belong to the IME while a conversion is in progress.
+      if (window.__gld.composing(e)) return;
       if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
       else if (e.key === 'Enter') { e.preventDefault(); execute(); }
-      else if (e.key === 'Escape') { close(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      else if (e.key === 'Tab') { e.preventDefault(); }
     };
 
     list = document.createElement('div');
     list.className = 'gp-palette-list';
+    list.id = 'gp-palette-list';
+    list.setAttribute('role', 'listbox');
 
     dialog.appendChild(input);
     dialog.appendChild(list);
@@ -63,7 +80,7 @@ export function getCommandPaletteScript(): string {
   }
 
   function filter() {
-    var q = input.value.toLowerCase();
+    var q = (input.value || '').toLowerCase();
     filtered = commands.filter(function(cmd) {
       return cmd.label.toLowerCase().indexOf(q) !== -1 ||
              cmd.section.toLowerCase().indexOf(q) !== -1;
@@ -74,6 +91,13 @@ export function getCommandPaletteScript(): string {
   function render() {
     list.innerHTML = '';
     var currentSection = '';
+    if (!filtered.length) {
+      var empty = document.createElement('div');
+      empty.className = 'gp-palette-empty';
+      empty.textContent = 'No matching commands';
+      list.appendChild(empty);
+      return;
+    }
     filtered.forEach(function(cmd, i) {
       if (cmd.section !== currentSection) {
         currentSection = cmd.section;
@@ -84,17 +108,47 @@ export function getCommandPaletteScript(): string {
       }
       var item = document.createElement('div');
       item.className = 'gp-palette-item' + (i === selectedIdx ? ' selected' : '');
-      item.innerHTML = '<span class="gp-palette-label">' + cmd.label + '</span>' +
-        (cmd.keys ? '<kbd class="gp-palette-key">' + cmd.keys + '</kbd>' : '');
-      item.onmouseenter = function() { selectedIdx = i; render(); };
+      item.id = 'gp-palette-item-' + i;
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', i === selectedIdx ? 'true' : 'false');
+      // textContent, not innerHTML: a path containing markup-looking characters used to
+      // break the row apart.
+      var label = document.createElement('span');
+      label.className = 'gp-palette-label';
+      label.textContent = cmd.label;
+      item.appendChild(label);
+      if (cmd.keys) {
+        var kbd = document.createElement('kbd');
+        kbd.className = 'gp-palette-key';
+        kbd.textContent = cmd.keys;
+        item.appendChild(kbd);
+      }
+      // Only re-style on hover; re-rendering the list from a mouseenter handler recreated
+      // the element under the cursor and fought with arrow-key selection.
+      item.onmouseenter = function() { select(i); };
       item.onclick = function() { selectedIdx = i; execute(); };
       list.appendChild(item);
     });
+    syncActiveDescendant();
+  }
+
+  function select(i) {
+    if (i === selectedIdx) return;
+    var prev = list.querySelector('.gp-palette-item.selected');
+    if (prev) { prev.classList.remove('selected'); prev.setAttribute('aria-selected', 'false'); }
+    selectedIdx = i;
+    var next = document.getElementById('gp-palette-item-' + i);
+    if (next) { next.classList.add('selected'); next.setAttribute('aria-selected', 'true'); }
+    syncActiveDescendant();
+  }
+
+  function syncActiveDescendant() {
+    if (input) input.setAttribute('aria-activedescendant', 'gp-palette-item-' + selectedIdx);
   }
 
   function move(dir) {
-    selectedIdx = Math.max(0, Math.min(filtered.length - 1, selectedIdx + dir));
-    render();
+    if (!filtered.length) return;
+    select(Math.max(0, Math.min(filtered.length - 1, selectedIdx + dir)));
     var sel = list.querySelector('.selected');
     if (sel) sel.scrollIntoView({ block: 'nearest' });
   }
@@ -107,33 +161,46 @@ export function getCommandPaletteScript(): string {
     }
   }
 
+  function isOpen() { return !!overlay && overlay.classList.contains('open'); }
+
   function open() {
-    buildCommands();
     if (!overlay) createOverlay();
+    lastFocus = document.activeElement;
+    buildCommands();
     overlay.classList.add('open');
+    // Cleared *before* filtering — the old order left the previous query's results on
+    // screen beside an empty input.
+    input.value = '';
     filter();
     render();
-    input.value = '';
     input.focus();
   }
 
   function close() {
-    if (overlay) overlay.classList.remove('open');
+    if (!isOpen()) return;
+    overlay.classList.remove('open');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+    lastFocus = null;
   }
 
   window.__gld.openPalette = open;
   window.__gld.closePalette = close;
+  window.__gld.paletteIsOpen = isOpen;
 
   document.addEventListener('keydown', function(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-      if (e.key === 'Escape' && overlay && overlay.classList.contains('open')) close();
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isOpen()) close(); else open();
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    // Escape works wherever focus landed inside the dialog, not just in the input.
+    if (e.key === 'Escape' && isOpen()) {
       e.preventDefault();
-      open();
+      e.stopPropagation();
+      close();
     }
-  });
+  }, true);
 })();
 `;
 }

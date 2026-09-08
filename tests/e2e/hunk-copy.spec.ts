@@ -27,4 +27,18 @@ test.describe('Hunk Copy', () => {
     const display = await checkIcon.evaluate(el => (el as HTMLElement).style.display);
     expect(display).not.toBe('none');
   });
+
+  test('header actions stay hidden until the row is hovered', async ({ page, unifiedDiffPageUrl }) => {
+    await page.goto(unifiedDiffPageUrl);
+    // Guards against losing the reveal-on-hover rules: without them every hunk header and
+    // file header carries a permanently visible copy icon, which reads as visual noise.
+    const hunkBtn = page.locator('.gp-view-unified .gp-hunk-copy-btn').first();
+    expect(await hunkBtn.evaluate(el => getComputedStyle(el).opacity)).toBe('0');
+    await page.locator('.gp-view-unified .gp-hunk').first().hover();
+    await page.waitForTimeout(250);
+    expect(await hunkBtn.evaluate(el => getComputedStyle(el).opacity)).toBe('1');
+
+    const newSideBtn = page.locator('.gp-copy-new-btn').first();
+    expect(await newSideBtn.evaluate(el => getComputedStyle(el).opacity)).toBe('0');
+  });
 });

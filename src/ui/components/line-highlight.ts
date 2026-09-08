@@ -30,7 +30,7 @@ export function getLineHighlightScript(): string {
     if (endLn && endLn !== startLn) {
       hash += '-' + side + endLn;
     }
-    history.replaceState(null, '', hash);
+    try { history.replaceState(null, '', hash); } catch (e) { /* file:// restrictions */ }
   }
 
   function parseHash(hash) {
@@ -47,6 +47,9 @@ export function getLineHighlightScript(): string {
   document.addEventListener('click', function(e) {
     var lnCell = e.target.closest('.gp-ln[data-ln]');
     if (!lnCell) return;
+    // The first click of a double-click (which opens the memo editor) must not also
+    // rewrite location.hash and clobber a permalink the user just copied.
+    if (e.detail > 1) return;
 
     e.preventDefault();
     var fileIdx = parseInt(lnCell.dataset.fileIdx);
@@ -64,10 +67,11 @@ export function getLineHighlightScript(): string {
       highlightRange(fileEl, start, end, side);
       updateHash(fHash, side, start, end);
     } else {
-      var tr = lnCell.closest('tr');
-      if (tr) tr.classList.add(HIGHLIGHT_CLASS);
-      updateHash(fHash, side, lineNum);
+      // Apply to both views, exactly like the range case — otherwise a single-line
+      // highlight vanished on switching views while a 2+ line one survived.
+      highlightRange(fileEl, lineNum, lineNum, side);
       lastClickedLn = { fileIdx: fileIdx, lineNum: lineNum, side: side };
+      updateHash(fHash, side, lineNum);
     }
   });
 
@@ -78,10 +82,14 @@ export function getLineHighlightScript(): string {
     if (!fileEl) return;
     clearHighlights();
     highlightRange(fileEl, parsed.startLn, parsed.endLn, parsed.side);
-    var first = fileEl.querySelector('.' + HIGHLIGHT_CLASS);
+    // The class lands on a row in each view; scrolling to the hidden one does nothing,
+    // which is why shared permalinks used to open at the top of the page.
+    var first = window.__gld.q('.' + HIGHLIGHT_CLASS, { root: fileEl, includeCollapsed: true });
     if (first) {
+      var body = fileEl.querySelector('.gp-file-body');
+      if (body && body.classList.contains('collapsed')) window.__gld.toggleFile(fileEl.dataset.fileIndex);
       setTimeout(function() {
-        first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.__gld.scrollToElement(first, Math.round(window.innerHeight / 3));
       }, 100);
     }
   }

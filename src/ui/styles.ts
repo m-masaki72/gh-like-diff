@@ -28,6 +28,12 @@ export function getStyles(): string {
   --gld-sidebar-width: 280px;
   --gld-split-ratio: 50%;
   --gld-ln-width: 50px;
+  --gld-tag-changed-bg: #ddf4ff; --gld-tag-changed-fg: #0550ae;
+  --gld-tag-added-bg: #dafbe1;   --gld-tag-added-fg: #116329;
+  --gld-tag-deleted-bg: #ffebe9; --gld-tag-deleted-fg: #a40e26;
+  --gld-tag-renamed-bg: #fff8c5; --gld-tag-renamed-fg: #7d4e00;
+  --gld-search-hit-bg: #fff2b3;  --gld-search-hit-fg: #1f2328;
+  --gld-search-cur-bg: #f9a825;  --gld-search-cur-fg: #1f2328;
 }
 
 /* Dark mode */
@@ -52,6 +58,12 @@ export function getStyles(): string {
     --gld-del-word-bg: rgba(248,81,73,0.4);
     --gld-hunk-bg: rgba(56,139,253,0.15);
     --gld-hunk-border: rgba(56,139,253,0.4);
+    --gld-tag-changed-bg: rgba(56,139,253,0.18); --gld-tag-changed-fg: #79c0ff;
+    --gld-tag-added-bg: rgba(63,185,80,0.18);    --gld-tag-added-fg: #7ee787;
+    --gld-tag-deleted-bg: rgba(248,81,73,0.18);  --gld-tag-deleted-fg: #ff9492;
+    --gld-tag-renamed-bg: rgba(187,128,9,0.18);  --gld-tag-renamed-fg: #e3b341;
+    --gld-search-hit-bg: rgba(187,128,9,0.45);   --gld-search-hit-fg: #e6edf3;
+    --gld-search-cur-bg: #d29922;                --gld-search-cur-fg: #0d1117;
   }
 }
 
@@ -82,6 +94,12 @@ export function getStyles(): string {
   --gld-del-word-bg: rgba(248,81,73,0.4);
   --gld-hunk-bg: rgba(56,139,253,0.15);
   --gld-hunk-border: rgba(56,139,253,0.4);
+  --gld-tag-changed-bg: rgba(56,139,253,0.18); --gld-tag-changed-fg: #79c0ff;
+  --gld-tag-added-bg: rgba(63,185,80,0.18);  --gld-tag-added-fg: #7ee787;
+  --gld-tag-deleted-bg: rgba(248,81,73,0.18);  --gld-tag-deleted-fg: #ff9492;
+  --gld-tag-renamed-bg: rgba(187,128,9,0.18);  --gld-tag-renamed-fg: #e3b341;
+  --gld-search-hit-bg: rgba(187,128,9,0.45);   --gld-search-hit-fg: #e6edf3;
+  --gld-search-cur-bg: #d29922;        --gld-search-cur-fg: #0d1117;
 }
 
 body {
@@ -154,7 +172,7 @@ body {
 /* === Layout === */
 .gp-layout {
   display: flex;
-  min-height: calc(100vh - 82px);
+  min-height: calc(100vh - var(--gld-sticky-top, 82px));
 }
 
 /* === File Tree Sidebar === */
@@ -165,8 +183,8 @@ body {
   background: var(--gld-canvas);
   overflow-y: auto;
   position: sticky;
-  top: 82px;
-  height: calc(100vh - 82px);
+  top: var(--gld-sticky-top, 82px);
+  height: calc(100vh - var(--gld-sticky-top, 82px));
   transition: width 0.2s, min-width 0.2s;
   z-index: 50;
 }
@@ -205,7 +223,7 @@ body {
 .gp-file-icon { flex-shrink: 0; width: 14px; font-size: 10px; text-align: center; }
 .gp-file-icon.added { color: var(--gld-success); }
 .gp-file-icon.deleted { color: var(--gld-danger); }
-.gp-file-icon.modified { color: #bf8700; }
+.gp-file-icon.modified, .gp-file-icon.changed { color: #bf8700; }
 .gp-file-icon.renamed { color: var(--gld-fg-muted); }
 
 .gp-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -267,7 +285,7 @@ body {
   align-items: center;
   gap: 8px;
   position: sticky;
-  top: 82px;
+  top: var(--gld-sticky-top, 82px);
   z-index: 10;
   font-size: 12px;
 }
@@ -286,10 +304,10 @@ body {
   border-radius: 10px;
   font-weight: 500;
 }
-.gp-file-tag.changed { background: #ddf4ff; color: var(--gld-accent); }
-.gp-file-tag.added { background: #dafbe1; color: var(--gld-success); }
-.gp-file-tag.deleted { background: #ffebe9; color: var(--gld-danger); }
-.gp-file-tag.renamed { background: #fff8c5; color: #9a6700; }
+.gp-file-tag.changed { background: var(--gld-tag-changed-bg); color: var(--gld-tag-changed-fg); }
+.gp-file-tag.added { background: var(--gld-tag-added-bg); color: var(--gld-tag-added-fg); }
+.gp-file-tag.deleted { background: var(--gld-tag-deleted-bg); color: var(--gld-tag-deleted-fg); }
+.gp-file-tag.renamed { background: var(--gld-tag-renamed-bg); color: var(--gld-tag-renamed-fg); }
 
 .gp-collapse-btn {
   font-family: var(--gld-font-sans);
@@ -533,7 +551,7 @@ body.gp-resizing * {
 .gp-search {
   display: none;
   position: fixed;
-  top: 82px;
+  top: var(--gld-sticky-top, 82px);
   right: 20px;
   background: var(--gld-canvas);
   border: 1px solid var(--gld-border);
@@ -566,43 +584,6 @@ body.gp-resizing * {
   font-size: 16px;
   padding: 0 4px;
 }
-
-/* === Keyboard hint === */
-.gp-kbd-hint {
-  position: fixed;
-  bottom: 12px;
-  right: 12px;
-  background: var(--gld-canvas);
-  border: 1px solid var(--gld-border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 11px;
-  color: var(--gld-fg-muted);
-  z-index: 100;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  opacity: 0.7;
-  transition: opacity 0.2s;
-}
-.gp-kbd-hint:hover { opacity: 1; }
-.gp-kbd-hint kbd {
-  background: var(--gld-canvas-subtle);
-  border: 1px solid var(--gld-border);
-  border-radius: 3px;
-  padding: 1px 4px;
-  font-family: var(--gld-font-mono);
-  font-size: 10px;
-}
-
-/* === Virtual scroll placeholder === */
-.gp-lazy-placeholder {
-  padding: 12px 14px;
-  text-align: center;
-  color: var(--gld-fg-muted);
-  font-size: 12px;
-  background: var(--gld-canvas-subtle);
-  cursor: pointer;
-}
-.gp-lazy-placeholder:hover { background: var(--gld-neutral-muted); }
 
 /* Hunk copy button */
 .gp-hunk-copy-btn {
@@ -796,9 +777,9 @@ body[data-view="line"] .gp-view-side { display: none; }
 .gp-minimap {
   position: fixed;
   right: 0;
-  top: 82px;
+  top: var(--gld-sticky-top, 82px);
   width: 48px;
-  height: calc(100vh - 82px);
+  height: calc(100vh - var(--gld-sticky-top, 82px));
   z-index: 50;
   cursor: pointer;
   transition: width 0.2s, opacity 0.2s;
@@ -991,7 +972,7 @@ body[data-view="line"] .gp-view-side { display: none; }
 
 /* === Print === */
 @media print {
-  .gp-header, .gp-toolbar, .gp-sidebar, .gp-search, .gp-kbd-hint,
+  .gp-header, .gp-toolbar, .gp-sidebar, .gp-search, .gp-shortcuts, .gp-toast-container,
   .gp-memo-panel, .gp-chevron-btn, .gp-copy-btn, .gp-hunk-copy-btn,
   .gp-expand-row, .gp-reviewed-label, .gp-side-divider, .gp-minimap { display: none !important; }
   .gp-layout { display: block; }
@@ -1002,6 +983,145 @@ body[data-view="line"] .gp-view-side { display: none; }
   .gp-ln { padding: 0 4px !important; }
   .gp-code { padding: 0 6px !important; }
   body { background: #fff; color: #000; }
+}
+
+/* === Line wrapping (toggleable) === */
+/* Off by default: side-by-side keeps per-cell horizontal scroll. When on, long lines wrap
+   so nothing is silently cut off — the 4px scrollbars are invisible on macOS. */
+.gp-code, .gp-code-inner { tab-size: 4; -moz-tab-size: 4; }
+body.gp-wrap .gp-code,
+body.gp-wrap .gp-code-inner { white-space: pre-wrap; overflow-wrap: anywhere; }
+body.gp-wrap .gp-code-inner { overflow-x: hidden; }
+body.gp-wrap .gp-unified-wrapper { overflow-x: hidden; }
+body.gp-wrap .gp-diff-table { table-layout: fixed; width: 100%; }
+
+/* Anchor jumps (#gp-file-N, permalinks) must clear the sticky header. */
+.gp-file, .gp-diff-table tr { scroll-margin-top: calc(var(--gld-sticky-top, 82px) + 12px); }
+
+/* The per-file "copy new side" action follows the same reveal-on-hover rule as the other
+   header buttons, so the header stays quiet until the row is pointed at. */
+.gp-copy-new-btn { opacity: 0; transition: opacity 0.15s; }
+.gp-file-header:hover .gp-copy-new-btn,
+.gp-copy-new-btn:focus-visible { opacity: 1; }
+.gp-hunk-copy-btn:focus-visible { opacity: 1; }
+
+/* === Empty file bodies === */
+.gp-empty-file-cell {
+  padding: 12px 14px;
+  color: var(--gld-fg-muted);
+  font-style: italic;
+  font-family: var(--gld-font-sans);
+}
+
+/* === No newline at end of file === */
+.gp-no-newline {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--gld-border);
+  border-radius: 3px;
+  color: var(--gld-fg-muted);
+  font-size: 10px;
+  line-height: 14px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+/* === Filter empty state === */
+.gp-no-matches { padding: 24px; text-align: center; color: var(--gld-fg-muted); }
+
+/* === Search scope and hits === */
+.gp-search-scope { display: inline-flex; gap: 2px; }
+.gp-search-scope .gp-btn { padding: 2px 6px; font-size: 11px; }
+.gp-search-hit { background: var(--gld-search-hit-bg); color: var(--gld-search-hit-fg); border-radius: 2px; }
+.gp-search-hit-current {
+  background: var(--gld-search-cur-bg);
+  color: var(--gld-search-cur-fg);
+  outline: 2px solid var(--gld-search-cur-bg);
+}
+
+/* === Command palette empty state === */
+.gp-palette-empty { padding: 16px; text-align: center; color: var(--gld-fg-muted); font-size: 13px; }
+
+/* === Keyboard shortcuts dialog === */
+.gp-shortcuts {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.4);
+}
+.gp-shortcuts[hidden] { display: none; }
+.gp-shortcuts-panel {
+  width: min(480px, calc(100vw - 32px));
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--gld-canvas);
+  border: 1px solid var(--gld-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+}
+.gp-shortcuts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--gld-border);
+}
+.gp-shortcuts-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 16px;
+  font-size: 13px;
+}
+.gp-shortcuts-list dt { text-align: right; }
+.gp-shortcuts-list dd { margin: 0; color: var(--gld-fg-muted); }
+.gp-shortcuts-list kbd {
+  background: var(--gld-canvas-subtle);
+  border: 1px solid var(--gld-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--gld-font-mono);
+  font-size: 11px;
+}
+
+/* === Minimap visibility === */
+.gp-minimap.collapsed { display: none; }
+body.gp-no-minimap .gp-main { padding-right: 8px; }
+
+/* === Toolbar wrapping === */
+/* Without this the right-hand controls slide off-screen on narrow windows and, because
+   the body suppresses horizontal scrolling, cannot be reached at all. */
+.gp-toolbar { flex-wrap: wrap; row-gap: 4px; }
+
+@media (max-width: 700px) {
+  .gp-header-meta { display: none; }
+  .gp-stats { display: none; }
+  .gp-file-filter { width: 100%; min-width: 0; }
+}
+
+/* === Print === */
+@media print {
+  /* Force the light palette: printing a dark page put pale text on white paper. */
+  :root, [data-theme="dark"], :root:not([data-theme="light"]) {
+    --gld-fg: #1f2328; --gld-fg-muted: #57606a; --gld-fg-subtle: #6e7781;
+    --gld-canvas: #ffffff; --gld-canvas-subtle: #f6f8fa;
+    --gld-border: #d0d7de; --gld-border-muted: #d8dee4;
+    --gld-add-line-bg: #e6ffec; --gld-del-line-bg: #ffebe9;
+    --gld-hunk-bg: #ddf4ff;
+  }
+  [data-theme="dark"] .hljs-keyword, .hljs-keyword { color: #cf222e !important; }
+  [data-theme="dark"] .hljs-string, .hljs-string { color: #0a3069 !important; }
+  [data-theme="dark"] .hljs-comment, .hljs-comment { color: #6e7781 !important; }
+  [data-theme="dark"] .hljs-number, .hljs-number { color: #0550ae !important; }
+  [data-theme="dark"] .hljs-title, .hljs-title { color: #8250df !important; }
+  /* Long lines are clipped, not scrolled, on paper — wrap them instead of losing them. */
+  .gp-code, .gp-code-inner { white-space: pre-wrap !important; overflow: visible !important; overflow-wrap: anywhere; }
+  .gp-diff-table { table-layout: fixed; width: 100%; }
 }
 `;
 }

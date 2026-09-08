@@ -53,7 +53,10 @@ describe('buildHtml', () => {
 
   it('includes embedded diff data', () => {
     const html = buildHtml(baseOpts);
-    expect(html).toContain('id="gp-diff-data"');
+    // The full parsed diff is no longer embedded: nothing read it at runtime, it roughly
+    // doubled the output size, and it leaked the raw /dev/null paths into the page.
+    expect(html).not.toContain('id="gp-diff-data"');
+    expect(html).toContain('id="gp-file-sources"');
   });
 
   it('includes client scripts', () => {

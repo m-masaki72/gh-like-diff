@@ -48,12 +48,19 @@ Designed for developers who live in the terminal:
 |-----|--------|
 | `j` / `k` | Jump between files |
 | `n` / `p` | Jump between hunks |
+| `u` | Jump to the next unreviewed file |
 | `r` | Toggle "Viewed" for current file |
 | `/` | Open search overlay |
 | `b` | Toggle sidebar |
-| `Cmd+K` | Command palette |
-| `?` | Toggle keyboard shortcuts |
-| `Escape` | Close overlays |
+| `w` | Toggle line wrapping |
+| `m` | Toggle minimap |
+| `Cmd+K` / `Ctrl+K` | Command palette |
+| `?` | Keyboard shortcut reference |
+| `Escape` | Close the innermost overlay |
+
+Modifier combinations are left to the browser, so `Cmd+R` reloads, `Cmd+P` prints and
+`Cmd+J` opens downloads as usual. Shortcuts are also suppressed while an IME conversion is
+in progress, so confirming Japanese input never fires an action.
 
 ### File Tree Sidebar
 A collapsible sidebar lists all changed files in a directory tree with:
@@ -64,10 +71,30 @@ A collapsible sidebar lists all changed files in a directory tree with:
 - Active file tracking on scroll
 
 ### In-Page Search
-Press `/` to open a search overlay that highlights matches across the entire diff. Navigate results with `Enter` / `Shift+Enter`.
+Press `/` to open a search overlay that highlights matches across the visible diff. Navigate
+results with `Enter` / `Shift+Enter`, and narrow the scope to added or deleted lines only.
+Highlighting is incremental but does not scroll the page while you type.
 
 ### Context Expansion
-GitHub-style expand buttons on gap rows: ▲ (show lines above), ▼ (show lines below), and ↕ (show all hidden lines). Expands 20 lines per click, with full line-highlight and memo support on expanded rows.
+GitHub-style expand buttons on every gap row: ▼ walks down from the top of the gap, ▲ walks
+up from the bottom, and ↕ reveals everything at once. Each arrow reveals lines contiguous
+with the hunk it points at, 20 at a time, with full line-highlight and memo support on the
+expanded rows.
+
+Expansion needs the file's full source. The CLI reads it from whichever revision the diff's
+"+" side refers to — the working tree, the index for `--staged`, or the right-hand ref of a
+range such as `main...HEAD`. When no source is available the controls are omitted rather
+than rendered inert.
+
+### Line Wrapping
+Long lines scroll horizontally inside their own cell by default. Press `w` (or use the
+toolbar button) to wrap them instead — useful for minified code and long URLs, where a
+4px scrollbar is easy to miss entirely.
+
+### Per-Diff State
+Memos, review progress and view preferences are keyed on a hash of the diff itself, not on
+the repository name, so two diffs of the same repo never inherit each other's notes. The
+**Reset** button clears everything this page has stored.
 
 ### Accessibility
 Semantic HTML with full ARIA support: `role` attributes on toolbar, main content, sidebar, and search overlay. Skip-to-content link, `aria-pressed` on toggle buttons, `aria-live` regions for dynamic content, and `progressbar` role on review progress.
@@ -95,6 +122,9 @@ const html = generate(diffString, {
   outputFormat: 'side-by-side',
   colorScheme: 'dark',
   title: 'My Review',
+  // Optional: full contents of each changed file, keyed by path. Required for the
+  // context-expand controls — without it they are omitted instead of rendered inert.
+  fileContents: { 'src/utils.ts': sourceLines },
 });
 
 // Render just the diff HTML fragment (for embedding)

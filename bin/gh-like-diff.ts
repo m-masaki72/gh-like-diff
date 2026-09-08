@@ -1,5 +1,5 @@
 import { parseArgs } from '../src/cli/args.js';
-import { getGitInfo, getGitDiff, getNewFileContents } from '../src/cli/git.js';
+import { getGitInfo, getGitDiff, getNewFileContents, resolveNewSideRef } from '../src/cli/git.js';
 import { resolveOutputPath, writeOutput, openInBrowser, printSummary } from '../src/cli/output.js';
 import { parse } from '../src/core/parser.js';
 import { buildHtml } from '../src/core/template.js';
@@ -48,13 +48,16 @@ function main() {
     const fragment = renderDiff(parsed.files, {
       outputFormat: options.style === 'side' ? 'side-by-side' : 'line-by-line',
       embed: true,
+      noNewline: parsed.noNewline,
     });
     console.log(fragment);
     return;
   }
 
-  // Read file contents for context expansion
-  const fileContents = getNewFileContents(parsed.files);
+  // Read file contents for context expansion, from whichever revision the diff's "+" side
+  // points at (working tree, index, or a commit).
+  const newSideRef = resolveNewSideRef({ staged: options.staged, refs: options.refs });
+  const fileContents = getNewFileContents(parsed.files, newSideRef);
 
   // Full HTML generation
   const html = buildHtml({
@@ -67,6 +70,7 @@ function main() {
     files: parsed.files,
     stats: parsed.stats,
     fileContents,
+    noNewline: parsed.noNewline,
   });
 
   const outputPath = resolveOutputPath(options.save);

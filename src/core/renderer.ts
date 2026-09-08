@@ -4,13 +4,32 @@ import { detectLanguage, highlightLine } from './highlighter.js';
 
 export interface RenderOptions {
   outputFormat: 'side-by-side' | 'line-by-line';
-  maxLinesBeforeLazy: number;
   embed?: boolean;
+  /** Keys from the parser marking lines with no trailing newline. */
+  noNewline?: Set<string>;
+  /**
+   * Paths whose full source is embedded in the page. Expand controls are only rendered
+   * for these — a button with nothing to reveal is worse than no button at all.
+   */
+  expandableFiles?: Set<string>;
+}
+
+function canExpand(file: DiffFile, options: RenderOptions): boolean {
+  return !!options.expandableFiles && options.expandableFiles.has(filePath(file));
+}
+
+const NO_NEWLINE_BADGE =
+  '<span class="gp-no-newline" title="No newline at end of file" aria-label="No newline at end of file">\\</span>';
+
+function noNewlineBadge(
+  options: RenderOptions, fileIndex: number, side: 'L' | 'R', line: number | null | undefined,
+): string {
+  if (line == null || !options.noNewline) return '';
+  return options.noNewline.has(`${fileIndex}:${side}:${line}`) ? NO_NEWLINE_BADGE : '';
 }
 
 const DEFAULT_OPTIONS: RenderOptions = {
   outputFormat: 'side-by-side',
-  maxLinesBeforeLazy: Infinity,
 };
 
 function esc(text: string): string {
@@ -21,20 +40,78 @@ function esc(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function computeWordDiff(oldStr: string, newStr: string): { oldHtml: string; newHtml: string } {
+// Splits escaped HTML text into one entry per source character, so ranges can be
+// expressed in source-character offsets while emitting the original escaped form.
+// Entities (&amp;) and astral code points (emoji) each count as a single character.
+export function splitEscapedChars(escaped: string): string[] {
+  const out: string[] = [];
   let i = 0;
-  while (i < oldStr.length && i < newStr.length && oldStr[i] === newStr[i]) i++;
-  let oj = oldStr.length;
-  let nj = newStr.length;
-  while (oj > i && nj > i && oldStr[oj - 1] === newStr[nj - 1]) { oj--; nj--; }
-  const prefix = esc(oldStr.substring(0, i));
-  const suffix = esc(oldStr.substring(oj));
-  const oldMid = oldStr.substring(i, oj);
-  const newMid = newStr.substring(i, nj);
-  return {
-    oldHtml: prefix + (oldMid ? `<span class="gp-word-del">${esc(oldMid)}</span>` : '') + suffix,
-    newHtml: prefix + (newMid ? `<span class="gp-word-add">${esc(newMid)}</span>` : '') + suffix,
-  };
+  while (i < escaped.length) {
+    if (escaped[i] === '&') {
+      const semi = escaped.indexOf(';', i);
+      if (semi > -1 && semi - i <= 6) {
+        out.push(escaped.slice(i, semi + 1));
+        i = semi + 1;
+        continue;
+      }
+    }
+    const cp = escaped.codePointAt(i)!;
+    const len = cp > 0xffff ? 2 : 1;
+    out.push(escaped.slice(i, i + len));
+    i += len;
+  }
+  return out;
+}
+
+// Wraps [start, end) — in source-character offsets — with a span, without breaking
+// the tag nesting of already-highlighted HTML. Each text run opens and closes its
+// own span, so the result stays well-formed however the highlighter split the line.
+export function wrapCharRange(html: string, start: number, end: number, cls: string): string {
+  if (start >= end) return html;
+  let out = '';
+  let pos = 0;
+  const token = /(<[^>]*>)|([^<]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = token.exec(html)) !== null) {
+    if (m[1]) { out += m[1]; continue; }
+    const chars = splitEscapedChars(m[2]);
+    const runStart = pos;
+    const runEnd = pos + chars.length;
+    const s = Math.max(start, runStart);
+    const e = Math.min(end, runEnd);
+    if (s < e) {
+      out += chars.slice(0, s - runStart).join('')
+        + `<span class="${cls}">` + chars.slice(s - runStart, e - runStart).join('') + '</span>'
+        + chars.slice(e - runStart).join('');
+    } else {
+      out += m[2];
+    }
+    pos = runEnd;
+  }
+  return out;
+}
+
+function isWordChar(c: string): boolean {
+  return /[\w$]/.test(c) || (c.codePointAt(0) ?? 0) > 0x7f;
+}
+
+// Character-level diff snapped outward to word boundaries, in code-point offsets.
+// Offsets (never HTML) are returned so the caller can overlay them on highlighted markup.
+export function computeWordDiffRange(oldStr: string, newStr: string): {
+  start: number; oldEnd: number; newEnd: number;
+} {
+  const o = Array.from(oldStr);
+  const n = Array.from(newStr);
+  let start = 0;
+  while (start < o.length && start < n.length && o[start] === n[start]) start++;
+  let oldEnd = o.length;
+  let newEnd = n.length;
+  while (oldEnd > start && newEnd > start && o[oldEnd - 1] === n[newEnd - 1]) { oldEnd--; newEnd--; }
+
+  while (start > 0 && isWordChar(o[start - 1]) && (isWordChar(o[start] ?? '') || isWordChar(n[start] ?? ''))) start--;
+  while (oldEnd < o.length && newEnd < n.length && isWordChar(o[oldEnd]) && isWordChar(o[oldEnd - 1] ?? '')) { oldEnd++; newEnd++; }
+
+  return { start, oldEnd, newEnd };
 }
 
 function renderDiffDots(added: number, deleted: number): string {
@@ -58,28 +135,34 @@ function fileTag(file: DiffFile): { label: string; cls: string } {
   return { label: 'Modified', cls: 'changed' };
 }
 
+// git reports the missing side of an add/delete as /dev/null. Using it verbatim puts a
+// bogus "dev/" folder in the sidebar and hides the real path, so always resolve to the
+// side that actually exists.
+export function filePath(file: DiffFile): string {
+  const pick = (n?: string) => (n && n !== '/dev/null' ? n : '');
+  return pick(file.isDeleted ? file.oldName : file.newName) || pick(file.oldName) || pick(file.newName) || 'unknown';
+}
+
 function fileName(file: DiffFile): string {
   if (file.isRename) {
     return `${file.oldName} → ${file.newName}`;
   }
-  return file.newName || file.oldName || 'unknown';
+  return filePath(file);
 }
 
 function fileShortName(file: DiffFile): string {
-  const name = file.newName || file.oldName || 'unknown';
-  const parts = name.split('/');
+  const parts = filePath(file).split('/');
   return parts[parts.length - 1];
 }
 
 function fileDir(file: DiffFile): string {
-  const name = file.newName || file.oldName || '';
-  const parts = name.split('/');
+  const parts = filePath(file).split('/');
   if (parts.length <= 1) return '';
   return parts.slice(0, -1).join('/') + '/';
 }
 
 function fileHash(file: DiffFile): string {
-  const name = file.newName || file.oldName || 'unknown';
+  const name = filePath(file);
   let h = 0;
   for (let i = 0; i < name.length; i++) {
     h = ((h << 5) - h + name.charCodeAt(i)) | 0;
@@ -89,6 +172,30 @@ function fileHash(file: DiffFile): string {
 
 function totalChangedLines(file: DiffFile): number {
   return file.addedLines + file.deletedLines;
+}
+
+// A file card with no rendered rows reads as a rendering failure. Say why the body is
+// empty instead — git legitimately produces content-free entries for binaries, pure
+// renames, mode changes and empty files.
+export function emptyBodyReason(file: DiffFile): string | null {
+  // Checked before `blocks`: diff2html emits a synthetic "Binary file" block, which would
+  // otherwise render as a lone row followed by expand controls that cannot reveal anything.
+  if (file.isBinary) return 'Binary file not shown';
+  if (file.isTooBig) return 'File too large to display';
+  if (file.blocks.length > 0) return null;
+  if (file.isRename) return 'File renamed without content changes';
+  if (file.oldMode && file.newMode && String(file.oldMode) !== file.newMode) {
+    return `Mode changed ${String(file.oldMode)} → ${file.newMode}`;
+  }
+  if (file.isNew) return 'Empty file';
+  if (file.isDeleted) return 'File deleted (no content)';
+  return 'No content changes';
+}
+
+function renderEmptyBody(file: DiffFile, colspan: number): string {
+  const reason = emptyBodyReason(file);
+  if (!reason) return '';
+  return `<tr class="gp-empty-file"><td class="gp-empty-file-cell" colspan="${colspan}">${esc(reason)}</td></tr>`;
 }
 
 // Get last line numbers in a block
@@ -102,10 +209,12 @@ function getBlockEndLines(block: DiffBlock): { oldEnd: number; newEnd: number } 
   return { oldEnd, newEnd };
 }
 
-// Render a single expand row. Arrows point outward (direction of expansion):
-//   - first gap (before the first hunk): ▲ only (expand upward to reveal hidden lines above)
-//   - middle gap (between hunks): ▲▼ both
-//   - last gap (after the last hunk): ▼ only (expand downward to reveal hidden lines below)
+// Render a single expand row. Arrows follow the GitHub convention — they point toward
+// the diff, and each one reveals lines contiguous with the end of the gap it starts from:
+//   ▼ walks down from the top of the gap (the lines just after the preceding hunk)
+//   ▲ walks up from the bottom of the gap (the lines just before the following hunk)
+// Every gap offers both directions plus "show all", so no run of hidden lines is
+// reachable only by repeated clicking from the far end.
 type GapPosition = 'first' | 'middle' | 'last';
 
 function renderExpandRow(
@@ -113,20 +222,15 @@ function renderExpandRow(
   oldStart: number, oldEnd: number, newStart: number, newEnd: number,
   colspan: number,
   position: GapPosition,
+  view: 'side' | 'unified',
 ): string {
   const count = newEnd === -1 ? -1 : (newEnd - newStart + 1);
-  const label = count === -1 ? '' : `${count} hidden lines`;
-  const gapId = `${fileIndex}-${gapIndex}`;
+  const label = count === -1 ? '' : `${count} hidden line${count === 1 ? '' : 's'}`;
+  const gapId = `${view}-${fileIndex}-${gapIndex}`;
   const data = `data-file-idx="${fileIndex}" data-gap-id="${gapId}" data-old-start="${oldStart}" data-old-end="${oldEnd}" data-new-start="${newStart}" data-new-end="${newEnd}"`;
-  const upBtn = position !== 'last'
-    ? `<button class="gp-expand-arrow gp-expand-arrow-up" title="Expand upward" onclick="window.__gld.expandUp(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M4.427 9.573a.25.25 0 0 0 .177.427h6.792a.25.25 0 0 0 .177-.427L8.177 6.177a.25.25 0 0 0-.354 0Z"/></svg></button>`
-    : '';
-  const allBtn = position === 'middle'
-    ? `<button class="gp-expand-arrow gp-expand-arrow-all" title="Show all hidden lines" onclick="window.__gld.expandAll(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8.177 14.323l2.896-2.896a.25.25 0 0 0-.177-.427H8.75V5h2.146a.25.25 0 0 0 .177-.427L8.177 1.677a.25.25 0 0 0-.354 0L4.927 4.573a.25.25 0 0 0 .177.427H7.25v6h-2.146a.25.25 0 0 0-.177.427l2.896 2.896a.25.25 0 0 0 .354 0z"/></svg></button>`
-    : '';
-  const downBtn = position !== 'first'
-    ? `<button class="gp-expand-arrow gp-expand-arrow-down" title="Expand downward" onclick="window.__gld.expandDown(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M4.427 6.427a.25.25 0 0 1 .177-.427h6.792a.25.25 0 0 1 .177.427L8.177 9.823a.25.25 0 0 1-.354 0Z"/></svg></button>`
-    : '';
+  const upBtn = `<button class="gp-expand-arrow gp-expand-arrow-up" aria-label="Expand up toward the hunk below" title="Expand up (lines just above the next hunk)" onclick="window.__gld.expandUp(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4.427 9.573a.25.25 0 0 0 .177.427h6.792a.25.25 0 0 0 .177-.427L8.177 6.177a.25.25 0 0 0-.354 0Z"/></svg></button>`;
+  const allBtn = `<button class="gp-expand-arrow gp-expand-arrow-all" aria-label="Show all hidden lines" title="Show all hidden lines" onclick="window.__gld.expandAll(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8.177 14.323l2.896-2.896a.25.25 0 0 0-.177-.427H8.75V5h2.146a.25.25 0 0 0 .177-.427L8.177 1.677a.25.25 0 0 0-.354 0L4.927 4.573a.25.25 0 0 0 .177.427H7.25v6h-2.146a.25.25 0 0 0-.177.427l2.896 2.896a.25.25 0 0 0 .354 0z"/></svg></button>`;
+  const downBtn = `<button class="gp-expand-arrow gp-expand-arrow-down" aria-label="Expand down from the hunk above" title="Expand down (lines just below the previous hunk)" onclick="window.__gld.expandDown(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4.427 6.427a.25.25 0 0 1 .177-.427h6.792a.25.25 0 0 1 .177.427L8.177 9.823a.25.25 0 0 1-.354 0Z"/></svg></button>`;
   // side-by-side renders 4 cells so table-layout: fixed can derive consistent column widths
   // from every row (including expand rows). The unified view keeps the 2-cell colspan layout.
   if (colspan === 4) {
@@ -149,16 +253,20 @@ function renderHunkCopyBtn(): string {
 
 // --- Line-by-line (Unified) ---
 
-function renderUnifiedLine(line: DiffLine, fileIndex: number, wordDiffHtml?: string, hlContent?: string): string {
+function renderUnifiedLine(
+  line: DiffLine, fileIndex: number, options: RenderOptions, wordDiffHtml?: string, hlContent?: string,
+): string {
   const content = wordDiffHtml ?? hlContent ?? esc(line.content.slice(1));
   const fi = `data-file-idx="${fileIndex}"`;
+  const nlR = noNewlineBadge(options, fileIndex, 'R', line.newNumber);
+  const nlL = noNewlineBadge(options, fileIndex, 'L', line.oldNumber);
   switch (line.type) {
     case LineType.INSERT:
-      return `<tr class="gp-add"><td class="gp-ln" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-ln"></td><td class="gp-code"><span class="gp-prefix">+</span>${content}</td></tr>`;
+      return `<tr class="gp-add"><td class="gp-ln" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-ln"></td><td class="gp-code"><span class="gp-prefix">+</span>${content}${nlR}</td></tr>`;
     case LineType.DELETE:
-      return `<tr class="gp-del"><td class="gp-ln"></td><td class="gp-ln" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code"><span class="gp-prefix">-</span>${content}</td></tr>`;
+      return `<tr class="gp-del"><td class="gp-ln"></td><td class="gp-ln" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code"><span class="gp-prefix">-</span>${content}${nlL}</td></tr>`;
     case LineType.CONTEXT:
-      return `<tr class="gp-ctx"><td class="gp-ln" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-ln" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code"><span class="gp-prefix"> </span>${content}</td></tr>`;
+      return `<tr class="gp-ctx"><td class="gp-ln" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-ln" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code"><span class="gp-prefix"> </span>${content}${nlR || nlL}</td></tr>`;
     default:
       return '';
   }
@@ -170,30 +278,39 @@ function hlLine(line: DiffLine, lang: string | null): string | undefined {
   return result || undefined;
 }
 
-function renderUnifiedFile(file: DiffFile, fileIndex: number, lazy: boolean): string {
-  if (lazy) {
-    return `<div class="gp-lazy-placeholder" data-file-index="${fileIndex}" onclick="window.__gld.loadFile(${fileIndex})">Large file (${totalChangedLines(file)} changes) - click to load</div>`;
-  }
-  let rows = '';
+// Syntax-highlight the line first, then overlay the word-diff range on top, so changed
+// lines keep the same colouring as the context lines around them.
+function renderWordDiffContent(
+  line: DiffLine, lang: string | null, start: number, end: number, cls: string,
+): string {
+  const src = line.content.slice(1);
+  const base = (lang ? highlightLine(src, lang) : '') || esc(src);
+  return wrapCharRange(base, start, end, cls);
+}
+
+function renderUnifiedFile(file: DiffFile, fileIndex: number, options: RenderOptions): string {
+  let rows = renderEmptyBody(file, 3);
+  if (rows) return `<div class="gp-unified-wrapper"><table class="gp-diff-table"><tbody>${rows}</tbody></table></div>`;
+  const expandable = canExpand(file, options);
   const blocks = file.blocks;
   let gapIdx = 0;
-  const lang = detectLanguage(file.newName || file.oldName || '');
+  const lang = detectLanguage(filePath(file));
 
   for (let bi = 0; bi < blocks.length; bi++) {
     const block = blocks[bi];
     let currentGapId = '';
 
     if (bi === 0) {
-      if (block.newStartLine > 1) {
+      if (expandable && block.newStartLine > 1) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 3, 'first');
+        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 3, 'first', 'unified');
       }
     } else {
       const prev = getBlockEndLines(blocks[bi - 1]);
       const gapNew = block.newStartLine - 1 - prev.newEnd;
-      if (gapNew > 0) {
+      if (expandable && gapNew > 0) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 3, 'middle');
+        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 3, 'middle', 'unified');
       }
     }
 
@@ -211,26 +328,32 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, lazy: boolean): st
         const dels = blines.slice(delStart, insStart);
         const ins = blines.slice(insStart, li);
         const pairCount = Math.min(dels.length, ins.length);
-        const wds: { oldHtml: string; newHtml: string }[] = [];
+        const wds: { start: number; oldEnd: number; newEnd: number }[] = [];
         for (let j = 0; j < pairCount; j++) {
-          wds.push(computeWordDiff(dels[j].content.slice(1), ins[j].content.slice(1)));
+          wds.push(computeWordDiffRange(dels[j].content.slice(1), ins[j].content.slice(1)));
         }
         for (let j = 0; j < dels.length; j++) {
-          rows += renderUnifiedLine(dels[j], fileIndex, j < pairCount ? wds[j].oldHtml : undefined, j >= pairCount ? hlLine(dels[j], lang) : undefined);
+          const word = j < pairCount
+            ? renderWordDiffContent(dels[j], lang, wds[j].start, wds[j].oldEnd, 'gp-word-del')
+            : undefined;
+          rows += renderUnifiedLine(dels[j], fileIndex, options, word, j >= pairCount ? hlLine(dels[j], lang) : undefined);
         }
         for (let j = 0; j < ins.length; j++) {
-          rows += renderUnifiedLine(ins[j], fileIndex, j < pairCount ? wds[j].newHtml : undefined, j >= pairCount ? hlLine(ins[j], lang) : undefined);
+          const word = j < pairCount
+            ? renderWordDiffContent(ins[j], lang, wds[j].start, wds[j].newEnd, 'gp-word-add')
+            : undefined;
+          rows += renderUnifiedLine(ins[j], fileIndex, options, word, j >= pairCount ? hlLine(ins[j], lang) : undefined);
         }
       } else {
-        rows += renderUnifiedLine(blines[li], fileIndex, undefined, hlLine(blines[li], lang));
+        rows += renderUnifiedLine(blines[li], fileIndex, options, undefined, hlLine(blines[li], lang));
         li++;
       }
     }
   }
 
-  if (blocks.length > 0) {
+  if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3, 'last');
+    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3, 'last', 'unified');
   }
 
   return `<div class="gp-unified-wrapper"><table class="gp-diff-table"><tbody>${rows}</tbody></table></div>`;
@@ -274,7 +397,7 @@ function pairLines(block: DiffBlock): SidePair[] {
   return pairs;
 }
 
-function renderSideCellWithClass(line: DiffLine | null, side: 'left' | 'right', cls: string, fileIndex: number, wordDiffHtml?: string, hlContent?: string): string {
+function renderSideCellWithClass(line: DiffLine | null, side: 'left' | 'right', cls: string, fileIndex: number, options: RenderOptions, wordDiffHtml?: string, hlContent?: string): string {
   if (line === null) {
     return `<td class="gp-ln"></td><td class="gp-code gp-empty-line"></td>`;
   }
@@ -282,29 +405,30 @@ function renderSideCellWithClass(line: DiffLine | null, side: 'left' | 'right', 
   const content = wordDiffHtml ?? hlContent ?? esc(line.content.slice(1));
   const ds = side === 'left' ? 'L' : 'R';
   const fi = `data-file-idx="${fileIndex}"`;
+  const nl = noNewlineBadge(options, fileIndex, ds, ds === 'L' ? line.oldNumber : line.newNumber);
 
   if (line.type === LineType.CONTEXT) {
     const num = side === 'left' ? (line.oldNumber ?? '') : (line.newNumber ?? '');
-    return `<td class="gp-ln${cls}" ${fi} data-ln="${num}" data-side="${ds}">${num}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}</div></td>`;
+    return `<td class="gp-ln${cls}" ${fi} data-ln="${num}" data-side="${ds}">${num}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}${nl}</div></td>`;
   }
   if (line.type === LineType.DELETE && side === 'left') {
-    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}</div></td>`;
+    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.oldNumber}" data-side="L">${line.oldNumber ?? ''}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}${nl}</div></td>`;
   }
   if (line.type === LineType.INSERT && side === 'right') {
-    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}</div></td>`;
+    return `<td class="gp-ln${cls}" ${fi} data-ln="${line.newNumber}" data-side="R">${line.newNumber ?? ''}</td><td class="gp-code${cls}"><div class="gp-code-inner">${content}${nl}</div></td>`;
   }
   return `<td class="gp-ln"></td><td class="gp-code gp-empty-line"></td>`;
 }
 
-function renderSideFile(file: DiffFile, fileIndex: number, lazy: boolean): string {
-  if (lazy) {
-    return `<div class="gp-lazy-placeholder" data-file-index="${fileIndex}" onclick="window.__gld.loadFile(${fileIndex})">Large file (${totalChangedLines(file)} changes) - click to load</div>`;
+function renderSideFile(file: DiffFile, fileIndex: number, options: RenderOptions): string {
+  let rows = renderEmptyBody(file, 4);
+  if (rows) {
+    return `<div class="gp-side-container"><div class="gp-side-wrapper"><table class="gp-diff-table gp-side-table"><tbody>${rows}</tbody></table></div></div>`;
   }
-
-  let rows = '';
+  const expandable = canExpand(file, options);
   const blocks = file.blocks;
   let gapIdx = 0;
-  const lang = detectLanguage(file.newName || file.oldName || '');
+  const lang = detectLanguage(filePath(file));
 
   for (let bi = 0; bi < blocks.length; bi++) {
     const block = blocks[bi];
@@ -312,16 +436,16 @@ function renderSideFile(file: DiffFile, fileIndex: number, lazy: boolean): strin
 
     // Expand pair: before first hunk or between hunks
     if (bi === 0) {
-      if (block.newStartLine > 1) {
+      if (expandable && block.newStartLine > 1) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 4, 'first');
+        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 4, 'first', 'side');
       }
     } else {
       const prev = getBlockEndLines(blocks[bi - 1]);
       const gapNew = block.newStartLine - 1 - prev.newEnd;
-      if (gapNew > 0) {
+      if (expandable && gapNew > 0) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 4, 'middle');
+        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 4, 'middle', 'side');
       }
     }
 
@@ -343,25 +467,25 @@ function renderSideFile(file: DiffFile, fileIndex: number, lazy: boolean): strin
       let leftHl: string | undefined;
       let rightHl: string | undefined;
       if (pair.left && pair.right && pair.left.type === LineType.DELETE && pair.right.type === LineType.INSERT) {
-        const wd = computeWordDiff(pair.left.content.slice(1), pair.right.content.slice(1));
-        leftWordHtml = wd.oldHtml;
-        rightWordHtml = wd.newHtml;
+        const wd = computeWordDiffRange(pair.left.content.slice(1), pair.right.content.slice(1));
+        leftWordHtml = renderWordDiffContent(pair.left, lang, wd.start, wd.oldEnd, 'gp-word-del');
+        rightWordHtml = renderWordDiffContent(pair.right, lang, wd.start, wd.newEnd, 'gp-word-add');
       } else {
         if (pair.left) leftHl = hlLine(pair.left, lang);
         if (pair.right) rightHl = hlLine(pair.right, lang);
       }
 
-      rows += `<tr${rowCls}>${renderSideCellWithClass(pair.left, 'left', leftLnCls, fileIndex, leftWordHtml, leftHl)}${renderSideCellWithClass(pair.right, 'right', rightLnCls, fileIndex, rightWordHtml, rightHl)}</tr>`;
+      rows += `<tr${rowCls}>${renderSideCellWithClass(pair.left, 'left', leftLnCls, fileIndex, options, leftWordHtml, leftHl)}${renderSideCellWithClass(pair.right, 'right', rightLnCls, fileIndex, options, rightWordHtml, rightHl)}</tr>`;
     }
   }
 
   // Expand pair: after last hunk (to EOF, resolved by JS)
-  if (blocks.length > 0) {
+  if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4, 'last');
+    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4, 'last', 'side');
   }
 
-  return `<div class="gp-side-container"><div class="gp-side-wrapper"><table class="gp-diff-table gp-side-table"><tbody>${rows}</tbody></table></div><div class="gp-side-divider" onmousedown="window.__gld.startSplitResize(event)" title="Drag to resize"></div></div>`;
+  return `<div class="gp-side-container"><div class="gp-side-wrapper"><table class="gp-diff-table gp-side-table"><tbody>${rows}</tbody></table></div><div class="gp-side-divider" role="separator" aria-orientation="vertical" onmousedown="window.__gld.startSplitResize(event)" ontouchstart="window.__gld.startSplitResize(event)" title="Drag to resize (double-click to reset)"></div></div>`;
 }
 
 // --- File card ---
@@ -369,16 +493,15 @@ function renderSideFile(file: DiffFile, fileIndex: number, lazy: boolean): strin
 function renderFileCard(file: DiffFile, fileIndex: number, options: RenderOptions): string {
   const tag = fileTag(file);
   const name = fileName(file);
-  const copyName = file.newName || file.oldName || 'unknown';
-  const lazy = totalChangedLines(file) > options.maxLinesBeforeLazy;
+  const copyName = filePath(file);
   const fHash = fileHash(file);
 
   const isSide = options.outputFormat === 'side-by-side';
-  const sideContent = options.embed && !isSide ? '' : renderSideFile(file, fileIndex, lazy);
-  const unifiedContent = options.embed && isSide ? '' : renderUnifiedFile(file, fileIndex, lazy);
+  const sideContent = options.embed && !isSide ? '' : renderSideFile(file, fileIndex, options);
+  const unifiedContent = options.embed && isSide ? '' : renderUnifiedFile(file, fileIndex, options);
 
   return `
-<div class="gp-file" id="gp-file-${fileIndex}" data-file-index="${fileIndex}" data-file-hash="${fHash}">
+<div class="gp-file" id="gp-file-${fileIndex}" data-file-index="${fileIndex}" data-file-hash="${fHash}" data-file-path="${esc(copyName)}">
   <div class="gp-file-header">
     <button class="gp-chevron-btn" onclick="window.__gld.toggleFile(${fileIndex})" aria-label="Toggle file" title="Toggle file">
       <svg class="gp-chevron-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.94l3.72-3.72a.749.749 0 0 1 1.06 0Z"/></svg>
@@ -388,6 +511,9 @@ function renderFileCard(file: DiffFile, fileIndex: number, options: RenderOption
     <button class="gp-copy-btn" data-clipboard="${esc(copyName)}" onclick="window.__gld.copyFileName(this)" title="Copy file path">
       <svg class="gp-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25ZM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
       <svg class="gp-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" style="display:none"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+    </button>
+    <button class="gp-copy-btn gp-copy-new-btn" onclick="window.__gld.copyNewSide(${fileIndex})" title="Copy the new-side code of this file" aria-label="Copy new side">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3.75 1.5a.25.25 0 0 0-.25.25v11.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V6H9.75A1.75 1.75 0 0 1 8 4.25V1.5Zm5.75.56v2.19c0 .138.112.25.25.25h2.19ZM2 1.75C2 .784 2.784 0 3.75 0h5.086c.464 0 .909.184 1.237.513l3.414 3.414c.329.328.513.773.513 1.237v8.086A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25Z"/></svg>
     </button>
     <div class="gp-file-header-stats">
       ${file.addedLines > 0 ? `<span class="gp-stats-add">+${file.addedLines}</span>` : ''}
@@ -418,7 +544,7 @@ interface TreeNode {
 function buildTree(files: DiffFile[]): TreeNode {
   const root: TreeNode = { files: [], dirs: new Map() };
   for (let i = 0; i < files.length; i++) {
-    const name = files[i].newName || files[i].oldName || 'unknown';
+    const name = filePath(files[i]);
     const parts = name.split('/');
     const fileName = parts.pop()!;
     let node = root;
@@ -431,27 +557,28 @@ function buildTree(files: DiffFile[]): TreeNode {
   return root;
 }
 
-function renderTreeNode(node: TreeNode, maxChanges: number, depth: number, files: DiffFile[]): string {
+function renderTreeNode(node: TreeNode, maxChanges: number, depth: number, files: DiffFile[], prefix = ''): string {
   let html = '';
   const sorted = Array.from(node.dirs.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   for (const [dirName, child] of sorted) {
     const pad = depth * 12;
-    html += `<div class="gp-tree-dir" style="padding-left:${pad}px">
-  <button class="gp-tree-toggle" onclick="this.parentElement.classList.toggle('collapsed')">
+    const dirPath = prefix + dirName;
+    html += `<div class="gp-tree-dir" data-dir="${esc(dirPath)}" style="padding-left:${pad}px">
+  <button class="gp-tree-toggle" aria-expanded="true" onclick="window.__gld.toggleDir(this)">
     <svg class="gp-tree-chevron" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L10.19 8 6.22 4.03a.75.75 0 0 1 0-1.06Z"/></svg>
     <svg class="gp-tree-folder" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M.513 1.513A1.75 1.75 0 0 1 1.75 1h3.5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.5A1.75 1.75 0 0 1 16 4.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75c0-.464.184-.91.513-1.237Z"/></svg>
     <span class="gp-tree-dir-name">${esc(dirName)}</span>
   </button>
 </div>`;
     html += `<div class="gp-tree-children">`;
-    html += renderTreeNode(child, maxChanges, depth + 1, files);
+    html += renderTreeNode(child, maxChanges, depth + 1, files, dirPath + '/');
     html += `</div>`;
   }
 
   for (const { file, index } of node.files) {
     const orig = files[index];
     const tag = fileTag(orig);
-    const short = file.newName || file.oldName || 'unknown';
+    const short = filePath(file);
     const maxBar = 5;
     const total = orig.addedLines + orig.deletedLines || 1;
     const addW = Math.max(1, Math.round((orig.addedLines / total) * maxBar));
@@ -461,7 +588,7 @@ function renderTreeNode(node: TreeNode, maxChanges: number, depth: number, files
     const pad = depth * 12;
 
     html += `
-<a class="gp-file-item" href="#gp-file-${index}" data-file-index="${index}" onclick="window.__gld.navFile(${index}); return false;"${heatStyle} style="padding-left:${14 + pad}px">
+<a class="gp-file-item" href="#gp-file-${index}" data-file-index="${index}" title="${esc(filePath(orig))}" onclick="window.__gld.navFile(${index}); return false;"${heatStyle} style="padding-left:${14 + pad}px">
   <span class="gp-file-icon ${tag.cls}">${tag.label[0]}</span>
   <span class="gp-file-name">${esc(short)}</span>
   <span class="gp-file-bar">
