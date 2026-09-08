@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - View preferences, theme, sidebar state and directory collapse are remembered per diff.
 
 ### Fixed
+- `gh-like-diff HEAD~1` no longer ignores its refs when stdin is not a terminal. Stdin is
+  redirected under CI, npm scripts, editor tasks and cron; treating that as piped input
+  read an empty stdin and reported "No changes detected". Refs and `--staged` now win, and
+  `-` forces reading stdin.
+- Fully expanding a gap hides its now-stale `@@` header again: the expand row and the hunk
+  row were labelled with different ids, so the lookup never matched.
+- Marking a file viewed dims its sidebar entry again; the code toggled a class the
+  stylesheet does not define.
 - Files with more than 500 changed lines could not be opened at all: the placeholder called
   `window.__gld.renderFile`, which was never defined. Lazy loading is removed and every
   file is rendered up front.

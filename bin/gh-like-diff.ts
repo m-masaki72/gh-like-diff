@@ -2,7 +2,7 @@ import { parseArgs } from '../src/cli/args.js';
 import { loadConfig, CONFIG_FILENAME } from '../src/cli/config.js';
 import { getGitInfo, getGitDiff, getNewFileContents, resolveNewSideRef } from '../src/cli/git.js';
 import { resolveOutputPath, writeOutput, openInBrowser, printSummary } from '../src/cli/output.js';
-import { hasPipedInput, readStdin } from '../src/cli/stdin.js';
+import { hasPipedInput, readStdin, STDIN_REF } from '../src/cli/stdin.js';
 import { parse } from '../src/core/parser.js';
 import { buildHtml } from '../src/core/template.js';
 import { renderDiff } from '../src/core/renderer.js';
@@ -17,7 +17,14 @@ function main() {
 
   // A piped diff is self-contained: it may come from another machine, a saved patch or a
   // tool that is not git at all, so neither a repository nor git itself is required.
-  const piped = hasPipedInput();
+  //
+  // Refs and --staged say "ask git", so they win outright: `gh-like-diff HEAD~1` must keep
+  // working when it happens to run with stdin redirected, which is the normal state under
+  // CI, npm scripts and editor tasks. `-` forces reading stdin regardless.
+  const explicitStdin = options.refs.includes(STDIN_REF);
+  if (explicitStdin) options.refs = options.refs.filter(r => r !== STDIN_REF);
+  const piped = explicitStdin
+    || (options.refs.length === 0 && !options.staged && !options.file && hasPipedInput());
   const gitInfo = piped ? { repoName: '', branch: '', isRepo: false } : getGitInfo();
 
   if (!piped && !gitInfo.isRepo) {

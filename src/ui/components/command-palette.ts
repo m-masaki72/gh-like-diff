@@ -11,9 +11,12 @@ export function getCommandPaletteScript(): string {
   var lastFocus = null;
 
   function buildCommands() {
-    commands = [
+    // Offering a switch that switchView() refuses is worse than not offering it.
+    var canSwitchView = document.body.dataset.singleView !== '1';
+    commands = (canSwitchView ? [
       { id: 'unified', label: 'Switch to Unified view', section: 'View', fn: function() { window.__gld.switchView('line'); } },
-      { id: 'split', label: 'Switch to Split view', section: 'View', fn: function() { window.__gld.switchView('side'); } },
+      { id: 'split', label: 'Switch to Split view', section: 'View', fn: function() { window.__gld.switchView('side'); } }
+    ] : []).concat([
       { id: 'theme', label: 'Cycle theme (auto/dark/light)', section: 'View', fn: function() { window.__gld.toggleTheme(); } },
       { id: 'sidebar', label: 'Toggle sidebar', section: 'View', keys: 'b', fn: function() { window.__gld.toggleSidebar(); } },
       { id: 'wrap', label: 'Toggle line wrapping', section: 'View', keys: 'w', fn: function() { window.__gld.toggleWrap(); } },
@@ -26,7 +29,7 @@ export function getCommandPaletteScript(): string {
       { id: 'next-unreviewed', label: 'Go to next unreviewed file', section: 'Review', keys: 'u', fn: function() { window.__gld.nextUnreviewed(); } },
       { id: 'reset', label: 'Reset saved state for this diff', section: 'Review', fn: function() { window.__gld.resetState(); } },
       { id: 'help', label: 'Keyboard shortcuts', section: 'Help', keys: '?', fn: function() { window.__gld.showShortcuts(); } }
-    ];
+    ]);
 
     window.__gld.qa('.gp-file', { includeCollapsed: true }).forEach(function(file) {
       var nameEl = file.querySelector('.gp-file-header-name');

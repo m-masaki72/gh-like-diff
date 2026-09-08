@@ -78,18 +78,24 @@ test.describe('Hidden view isolation', () => {
     expect(await page.locator('#gp-memo-count').textContent()).toBe('1');
   });
 
-  test('expanding in one view leaves the other view intact', async ({ page, edgeCaseUnifiedPageUrl }) => {
+  test('fully expanding a gap hides that view\'s stale hunk header', async ({ page, edgeCaseUnifiedPageUrl }) => {
     await page.goto(edgeCaseUnifiedPageUrl);
     const file = page.locator('.gp-file').filter({ hasText: 'module.ts' }).first();
-    const sideHunksBefore = await file.locator('.gp-view-side .gp-hunk').count();
+    const visibleHunks = (view: string) => file.locator(`.gp-view-${view} .gp-hunk`)
+      .evaluateAll(hs => hs.filter(h => (h as HTMLElement).style.display !== 'none').length);
+
+    const unifiedBefore = await visibleHunks('unified');
+    const sideBefore = await visibleHunks('side');
 
     await file.locator('.gp-view-unified .gp-expand-arrow-all').first().click();
     await page.waitForTimeout(300);
 
-    // Gap ids used to collide across views, so expanding here hid the other view's header.
-    const sideHunksAfter = await file.locator('.gp-view-side .gp-hunk')
-      .evaluateAll(hs => hs.filter(h => (h as HTMLElement).style.display !== 'none').length);
-    expect(sideHunksAfter).toBe(sideHunksBefore);
+    // The positive half matters most: an earlier version prefixed the expand row's gap id
+    // with the view name but not the hunk row's, so removeGap() matched nothing and this
+    // test passed while hiding was completely broken.
+    expect(await visibleHunks('unified')).toBe(unifiedBefore - 1);
+    // ...and the other view must be untouched, which is why the ids exist at all.
+    expect(await visibleHunks('side')).toBe(sideBefore);
   });
 
   test('switching views keeps the reader near the same file', async ({ page, edgeCasePageUrl }) => {

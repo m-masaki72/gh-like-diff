@@ -27,7 +27,8 @@ export function getReviewProgressScript(): string {
 
     boxes.forEach(function(cb) {
       var item = document.querySelector('.gp-file-item[data-file-index="' + cb.dataset.fileIndex + '"]');
-      if (item) item.classList.toggle('reviewed', cb.checked);
+      // gp-file-reviewed, not "reviewed": that is the class the stylesheet defines.
+      if (item) item.classList.toggle('gp-file-reviewed', cb.checked);
     });
   }
   window.__gld.updateReviewProgress = updateProgress;

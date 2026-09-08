@@ -30,6 +30,9 @@ export function getViewPrefsScript(): string {
     document.body.classList.toggle('gp-no-minimap', !on);
     setPressed('gp-minimap-btn', on);
     if (persist !== false) window.__gld.setPref('minimap', !!on);
+    // renderMap() bails while hidden, so anything that changed the document height in the
+    // meantime would leave stale bars behind on re-showing.
+    if (on && window.__gld.renderMinimap) window.__gld.renderMinimap();
   };
 
   window.__gld.toggleMinimap = function() {

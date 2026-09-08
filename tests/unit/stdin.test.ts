@@ -1,21 +1,60 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const readFileSync = vi.fn();
-vi.mock('node:fs', () => ({ readFileSync: (...a: unknown[]) => readFileSync(...a) }));
+const fstatSync = vi.fn();
+vi.mock('node:fs', () => ({
+  readFileSync: (...a: unknown[]) => readFileSync(...a),
+  fstatSync: (...a: unknown[]) => fstatSync(...a),
+}));
 
-const { hasPipedInput, readStdin } = await import('../../src/cli/stdin');
+const { hasPipedInput, readStdin, STDIN_REF } = await import('../../src/cli/stdin');
 
-beforeEach(() => readFileSync.mockReset());
+beforeEach(() => {
+  readFileSync.mockReset();
+  fstatSync.mockReset();
+});
 
 describe('hasPipedInput', () => {
+  const notTty = {} as NodeJS.ReadStream;
+
   it('is false at an interactive terminal', () => {
     expect(hasPipedInput({ isTTY: true } as NodeJS.ReadStream)).toBe(false);
   });
 
-  it('is true for a pipe or a redirect', () => {
-    // Node leaves isTTY undefined rather than false when stdin is not a terminal.
-    expect(hasPipedInput({} as NodeJS.ReadStream)).toBe(true);
-    expect(hasPipedInput({ isTTY: false } as unknown as NodeJS.ReadStream)).toBe(true);
+  it('is true for a pipe', () => {
+    fstatSync.mockReturnValue({ isFIFO: () => true, isSocket: () => false, isFile: () => false, size: 0 });
+    expect(hasPipedInput(notTty)).toBe(true);
+  });
+
+  it('is true for a socket, which is what a spawned process with an input buffer gets', () => {
+    fstatSync.mockReturnValue({ isFIFO: () => false, isSocket: () => true, isFile: () => false, size: 0 });
+    expect(hasPipedInput(notTty)).toBe(true);
+  });
+
+  it('is true for a redirect from a file with content', () => {
+    fstatSync.mockReturnValue({ isFIFO: () => false, isSocket: () => false, isFile: () => true, size: 42 });
+    expect(hasPipedInput(notTty)).toBe(true);
+  });
+
+  it('is false for /dev/null', () => {
+    // The critical case: stdin is not a TTY under CI, npm scripts, editor tasks and cron,
+    // and treating those as piped input made the CLI ignore the refs it was given.
+    fstatSync.mockReturnValue({ isFIFO: () => false, isSocket: () => false, isFile: () => false, size: 0 });
+    expect(hasPipedInput(notTty)).toBe(false);
+  });
+
+  it('is false for a redirect from an empty file', () => {
+    fstatSync.mockReturnValue({ isFIFO: () => false, isSocket: () => false, isFile: () => true, size: 0 });
+    expect(hasPipedInput(notTty)).toBe(false);
+  });
+
+  it('is false when stdin cannot be inspected at all', () => {
+    fstatSync.mockImplementationOnce(() => { throw new Error('EBADF'); });
+    expect(hasPipedInput(notTty)).toBe(false);
+  });
+
+  it('offers an explicit opt-in for scripts', () => {
+    expect(STDIN_REF).toBe('-');
   });
 });
 

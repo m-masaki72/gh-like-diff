@@ -222,11 +222,13 @@ function renderExpandRow(
   fileIndex: number, gapIndex: number,
   oldStart: number, oldEnd: number, newStart: number, newEnd: number,
   colspan: number,
-  view: 'side' | 'unified',
 ): string {
   const count = newEnd === -1 ? -1 : (newEnd - newStart + 1);
   const label = count === -1 ? '' : `${count} hidden line${count === 1 ? '' : 's'}`;
-  const gapId = `${view}-${fileIndex}-${gapIndex}`;
+  // No view prefix: removeGap() scopes its lookup to the enclosing table, so the id only
+  // has to be unique within one view. Prefixing it here but not on the hunk rows meant the
+  // two never matched and the stale @@ header was never hidden.
+  const gapId = `${fileIndex}-${gapIndex}`;
   const data = `data-file-idx="${fileIndex}" data-gap-id="${gapId}" data-old-start="${oldStart}" data-old-end="${oldEnd}" data-new-start="${newStart}" data-new-end="${newEnd}"`;
   const upBtn = `<button class="gp-expand-arrow gp-expand-arrow-up" aria-label="Expand up toward the hunk below" title="Expand up (lines just above the next hunk)" onclick="window.__gld.expandUp(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4.427 9.573a.25.25 0 0 0 .177.427h6.792a.25.25 0 0 0 .177-.427L8.177 6.177a.25.25 0 0 0-.354 0Z"/></svg></button>`;
   const allBtn = `<button class="gp-expand-arrow gp-expand-arrow-all" aria-label="Show all hidden lines" title="Show all hidden lines" onclick="window.__gld.expandAll(this)"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8.177 14.323l2.896-2.896a.25.25 0 0 0-.177-.427H8.75V5h2.146a.25.25 0 0 0 .177-.427L8.177 1.677a.25.25 0 0 0-.354 0L4.927 4.573a.25.25 0 0 0 .177.427H7.25v6h-2.146a.25.25 0 0 0-.177.427l2.896 2.896a.25.25 0 0 0 .354 0z"/></svg></button>`;
@@ -303,14 +305,14 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, options: RenderOpt
     if (bi === 0) {
       if (expandable && block.newStartLine > 1) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 3, 'unified');
+        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 3);
       }
     } else {
       const prev = getBlockEndLines(blocks[bi - 1]);
       const gapNew = block.newStartLine - 1 - prev.newEnd;
       if (expandable && gapNew > 0) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 3, 'unified');
+        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 3);
       }
     }
 
@@ -355,7 +357,7 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, options: RenderOpt
 
   if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3, 'unified');
+    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3);
   }
 
   return `<div class="gp-unified-wrapper"><table class="gp-diff-table"><tbody>${rows}</tbody></table></div>`;
@@ -440,14 +442,14 @@ function renderSideFile(file: DiffFile, fileIndex: number, options: RenderOption
     if (bi === 0) {
       if (expandable && block.newStartLine > 1) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 4, 'side');
+        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 4);
       }
     } else {
       const prev = getBlockEndLines(blocks[bi - 1]);
       const gapNew = block.newStartLine - 1 - prev.newEnd;
       if (expandable && gapNew > 0) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 4, 'side');
+        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 4);
       }
     }
 
@@ -485,7 +487,7 @@ function renderSideFile(file: DiffFile, fileIndex: number, options: RenderOption
   // Expand pair: after last hunk (to EOF, resolved by JS)
   if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4, 'side');
+    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4);
   }
 
   return `<div class="gp-side-container"><div class="gp-side-wrapper"><table class="gp-diff-table gp-side-table"><tbody>${rows}</tbody></table></div><div class="gp-side-divider" role="separator" aria-orientation="vertical" onmousedown="window.__gld.startSplitResize(event)" ontouchstart="window.__gld.startSplitResize(event)" title="Drag to resize (double-click to reset)"></div></div>`;
@@ -515,9 +517,9 @@ function renderFileCard(file: DiffFile, fileIndex: number, options: RenderOption
       <svg class="gp-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25ZM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
       <svg class="gp-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" style="display:none"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
     </button>
-    <button class="gp-copy-btn gp-copy-new-btn" onclick="window.__gld.copyNewSide(${fileIndex})" title="Copy the new-side code of this file" aria-label="Copy new side">
+    ${sideContent ? `<button class="gp-copy-btn gp-copy-new-btn" onclick="window.__gld.copyNewSide(${fileIndex})" title="Copy the new-side code of this file" aria-label="Copy new side">
       <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3.75 1.5a.25.25 0 0 0-.25.25v11.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V6H9.75A1.75 1.75 0 0 1 8 4.25V1.5Zm5.75.56v2.19c0 .138.112.25.25.25h2.19ZM2 1.75C2 .784 2.784 0 3.75 0h5.086c.464 0 .909.184 1.237.513l3.414 3.414c.329.328.513.773.513 1.237v8.086A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25Z"/></svg>
-    </button>
+    </button>` : ''}
     <div class="gp-file-header-stats">
       ${file.addedLines > 0 ? `<span class="gp-stats-add">+${file.addedLines}</span>` : ''}
       ${file.deletedLines > 0 ? `<span class="gp-stats-del">-${file.deletedLines}</span>` : ''}

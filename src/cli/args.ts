@@ -28,7 +28,7 @@ export function parseArgs(argv: string[], fileConfig: FileConfig = {}): CliOptio
     .name('gh-like-diff')
     .description('GitHub-quality diff views, anywhere. Offline, interactive, shareable.')
     .version('1.0.0')
-    .argument('[refs...]', 'Git refs to diff (e.g., HEAD~3, main...HEAD)')
+    .argument('[refs...]', 'Git refs to diff (e.g., HEAD~3, main...HEAD), or "-" to read a diff from stdin')
     .option('-s, --style <mode>', 'View style: "side" or "line"', 'side')
     .option('--staged', 'Show staged changes only', false)
     .option('-f, --file <path>', 'Filter to specific file')

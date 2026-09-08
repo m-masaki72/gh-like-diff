@@ -119,8 +119,11 @@ export function getNewFileContents(
   }
 
   const readFromGit = (path: string): string | null => {
-    // `git show :path` reads the index, `git show <rev>:path` a commit.
-    const r = spawnSync('git', ['show', `${ref}:${path}`], { encoding: 'utf-8', maxBuffer: MAX_FILE_SIZE });
+    // `git show :path` reads the index, `git show <rev>:path` a commit. When the new side
+    // is the working tree there is no revision, so fall back to HEAD — `null:path` is not
+    // a ref and would guarantee the lookup fails.
+    const spec = ref === null ? `HEAD:${path}` : `${ref}:${path}`;
+    const r = spawnSync('git', ['show', spec], { encoding: 'utf-8', maxBuffer: MAX_FILE_SIZE });
     return r.status === 0 && typeof r.stdout === 'string' ? r.stdout : null;
   };
 

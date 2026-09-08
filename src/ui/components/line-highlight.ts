@@ -82,16 +82,15 @@ export function getLineHighlightScript(): string {
     if (!fileEl) return;
     clearHighlights();
     highlightRange(fileEl, parsed.startLn, parsed.endLn, parsed.side);
-    // The class lands on a row in each view; scrolling to the hidden one does nothing,
-    // which is why shared permalinks used to open at the top of the page.
-    var first = window.__gld.q('.' + HIGHLIGHT_CLASS, { root: fileEl, includeCollapsed: true });
-    if (first) {
+    // Resolved inside the timeout, not before it: view-prefs may still switch the active
+    // view and review-progress may still collapse the file, and picking the row first
+    // would leave us scrolling to something that is display:none by the time we run.
+    setTimeout(function() {
       var body = fileEl.querySelector('.gp-file-body');
       if (body && body.classList.contains('collapsed')) window.__gld.toggleFile(fileEl.dataset.fileIndex);
-      setTimeout(function() {
-        window.__gld.scrollToElement(first, Math.round(window.innerHeight / 3));
-      }, 100);
-    }
+      var first = window.__gld.q('.' + HIGHLIGHT_CLASS, { root: fileEl, includeCollapsed: true });
+      if (first) window.__gld.scrollToElement(first, Math.round(window.innerHeight / 3));
+    }, 100);
   }
 
   window.addEventListener('hashchange', applyHashHighlight);

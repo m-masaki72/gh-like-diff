@@ -99,3 +99,68 @@ describe.skipIf(!built)('CLI with a config file', () => {
     expect(res.stdout).toContain('Generated:');
   });
 });
+
+describe.skipIf(!built)('CLI stdin detection', () => {
+  function repo() {
+    const dir = mkdtempSync(join(tmpdir(), 'gld-stdin-'));
+    const run = (args: string[]) => spawnSync('git', args, { cwd: dir, encoding: 'utf-8' });
+    run(['init', '-q']);
+    run(['config', 'user.email', 't@e.com']);
+    run(['config', 'user.name', 'T']);
+    writeFileSync(join(dir, 'a.txt'), 'line1\nline2\n');
+    run(['add', '-A']); run(['commit', '-qm', 'first']);
+    writeFileSync(join(dir, 'a.txt'), 'line1\nline2 changed\n');
+    run(['add', '-A']); run(['commit', '-qm', 'second']);
+    return dir;
+  }
+
+  it('still honours refs when stdin is /dev/null', () => {
+    // CI runners, npm scripts, editor tasks and cron all give a non-TTY stdin. Treating
+    // that as piped input silently dropped the refs and reported "No changes detected".
+    const dir = repo();
+    const res = spawnSync(process.execPath, [CLI, 'HEAD~1', '--no-open'], {
+      cwd: dir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('1 changed');
+    expect(res.stdout).not.toContain('No changes detected');
+  });
+
+  it('still honours --staged when stdin is a pipe', () => {
+    const dir = repo();
+    writeFileSync(join(dir, 'a.txt'), 'line1\nline2 staged\n');
+    spawnSync('git', ['add', '-A'], { cwd: dir });
+    const res = spawnSync(process.execPath, [CLI, '--staged', '--no-open'], {
+      cwd: dir, input: DIFF, encoding: 'utf-8',
+    });
+    expect(res.status).toBe(0);
+    // The summary shows no file names, so read the page: git's staged diff must win over
+    // the pipe. A populated Repository line also proves the git path was taken at all.
+    // Colour codes sit between the label and the value, so strip them before matching.
+    const plain = res.stdout.replace(/\x1b\[[\d;]*m/g, '');
+    expect(plain).toMatch(/Repository:\s+\S/);
+    const generated = res.stdout.match(/(\/\S+\.html)/)?.[1];
+    expect(generated, res.stdout).toBeTruthy();
+    const html = readFileSync(generated!, 'utf-8');
+    expect(html).toContain('a.txt');
+    expect(html).not.toContain('src/piped.ts');
+  });
+
+  it('reads the pipe when no refs were given', () => {
+    const dir = repo();
+    const res = spawnSync(process.execPath, [CLI, '--no-open'], {
+      cwd: dir, input: DIFF, encoding: 'utf-8',
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('1 changed');
+  });
+
+  it('reads the pipe on request even alongside refs', () => {
+    const dir = repo();
+    const res = spawnSync(process.execPath, [CLI, '-', '--no-open'], {
+      cwd: dir, input: DIFF, encoding: 'utf-8',
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('1 changed');
+  });
+});
