@@ -64,6 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The file collapse button exposes `aria-expanded`, the review progress bar reports its
   value, and the closed memo panel is out of the tab order.
 
+### Performance
+- The embedded file sources used for context expansion are now capped by a total budget.
+  Whole-file sources are expensive and highlighting them multiplies the cost again: twenty
+  5000-line files with a one-line change each produced a 42MB page in 1.7s, and now produce
+  4.5MB in 0.17s. Files that do not fit lose their expand controls, and the CLI says so.
+
 ### Changed
 - The full parsed diff is no longer embedded in the page. Nothing read it at runtime and it
   roughly doubled the output size.

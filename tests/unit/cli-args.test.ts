@@ -3,7 +3,7 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync, rmSync } from 'node:fs';
 import { parseArgs } from '../../src/cli/args';
-import { resolveOutputPath, writeOutput } from '../../src/cli/output';
+import { resolveOutputPath, writeOutput, printSummary } from '../../src/cli/output';
 
 function args(...argv: string[]) {
   return parseArgs(['node', 'gh-like-diff', ...argv]);
@@ -96,5 +96,49 @@ describe('writeOutput', () => {
     } finally {
       rmSync(join(tmpdir(), `gld-test-${process.pid}`), { recursive: true, force: true });
     }
+  });
+});
+
+describe('printSummary', () => {
+  function capture(extra: Record<string, unknown>) {
+    const lines: string[] = [];
+    const original = console.log;
+    console.log = (...a: unknown[]) => { lines.push(a.join(' ')); };
+    try {
+      printSummary({
+        repoName: 'repo', branch: 'main', fileCount: 3,
+        additions: 5, deletions: 2, style: 'side-by-side',
+        outputPath: '/tmp/out.html', ...extra,
+      });
+    } finally {
+      console.log = original;
+    }
+    // Strip the ANSI colour codes so the assertions read plainly.
+    return lines.join('\n').replace(/\x1b\[[\d;]*m/g, '');
+  }
+
+  it('reports the essentials', () => {
+    const out = capture({});
+    expect(out).toContain('repo');
+    expect(out).toContain('3 changed');
+    expect(out).toContain('/tmp/out.html');
+  });
+
+  it('names the config file when one was applied', () => {
+    // A setting arriving from a file must never be a silent surprise.
+    expect(capture({ configPath: '/proj/.gh-like-diffrc' })).toContain('/proj/.gh-like-diffrc');
+    expect(capture({})).not.toContain('Config:');
+  });
+
+  it('says when some files lost their expand controls', () => {
+    const out = capture({ expandInfo: { included: 2, total: 20 } });
+    expect(out).toContain('Expand:');
+    expect(out).toContain('2/20');
+    expect(out).toContain('too large to embed');
+  });
+
+  it('stays quiet when every file kept them', () => {
+    expect(capture({ expandInfo: { included: 20, total: 20 } })).not.toContain('Expand:');
+    expect(capture({ expandInfo: null })).not.toContain('Expand:');
   });
 });

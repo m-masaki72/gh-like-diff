@@ -168,17 +168,6 @@ function fileName(file: DiffFile): string {
   return filePath(file);
 }
 
-function fileShortName(file: DiffFile): string {
-  const parts = filePath(file).split('/');
-  return parts[parts.length - 1];
-}
-
-function fileDir(file: DiffFile): string {
-  const parts = filePath(file).split('/');
-  if (parts.length <= 1) return '';
-  return parts.slice(0, -1).join('/') + '/';
-}
-
 function fileHash(file: DiffFile): string {
   const name = filePath(file);
   let h = 0;
@@ -186,10 +175,6 @@ function fileHash(file: DiffFile): string {
     h = ((h << 5) - h + name.charCodeAt(i)) | 0;
   }
   return Math.abs(h).toString(16).padStart(8, '0').slice(0, 8);
-}
-
-function totalChangedLines(file: DiffFile): number {
-  return file.addedLines + file.deletedLines;
 }
 
 // A file card with no rendered rows reads as a rendering failure. Say why the body is
@@ -233,13 +218,10 @@ function getBlockEndLines(block: DiffBlock): { oldEnd: number; newEnd: number } 
 //   ▲ walks up from the bottom of the gap (the lines just before the following hunk)
 // Every gap offers both directions plus "show all", so no run of hidden lines is
 // reachable only by repeated clicking from the far end.
-type GapPosition = 'first' | 'middle' | 'last';
-
 function renderExpandRow(
   fileIndex: number, gapIndex: number,
   oldStart: number, oldEnd: number, newStart: number, newEnd: number,
   colspan: number,
-  position: GapPosition,
   view: 'side' | 'unified',
 ): string {
   const count = newEnd === -1 ? -1 : (newEnd - newStart + 1);
@@ -321,14 +303,14 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, options: RenderOpt
     if (bi === 0) {
       if (expandable && block.newStartLine > 1) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 3, 'first', 'unified');
+        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 3, 'unified');
       }
     } else {
       const prev = getBlockEndLines(blocks[bi - 1]);
       const gapNew = block.newStartLine - 1 - prev.newEnd;
       if (expandable && gapNew > 0) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 3, 'middle', 'unified');
+        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 3, 'unified');
       }
     }
 
@@ -373,7 +355,7 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, options: RenderOpt
 
   if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3, 'last', 'unified');
+    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3, 'unified');
   }
 
   return `<div class="gp-unified-wrapper"><table class="gp-diff-table"><tbody>${rows}</tbody></table></div>`;
@@ -458,14 +440,14 @@ function renderSideFile(file: DiffFile, fileIndex: number, options: RenderOption
     if (bi === 0) {
       if (expandable && block.newStartLine > 1) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 4, 'first', 'side');
+        rows += renderExpandRow(fileIndex, gapIdx++, 1, block.oldStartLine - 1, 1, block.newStartLine - 1, 4, 'side');
       }
     } else {
       const prev = getBlockEndLines(blocks[bi - 1]);
       const gapNew = block.newStartLine - 1 - prev.newEnd;
       if (expandable && gapNew > 0) {
         currentGapId = `${fileIndex}-${gapIdx}`;
-        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 4, 'middle', 'side');
+        rows += renderExpandRow(fileIndex, gapIdx++, prev.oldEnd + 1, block.oldStartLine - 1, prev.newEnd + 1, block.newStartLine - 1, 4, 'side');
       }
     }
 
@@ -503,7 +485,7 @@ function renderSideFile(file: DiffFile, fileIndex: number, options: RenderOption
   // Expand pair: after last hunk (to EOF, resolved by JS)
   if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4, 'last', 'side');
+    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4, 'side');
   }
 
   return `<div class="gp-side-container"><div class="gp-side-wrapper"><table class="gp-diff-table gp-side-table"><tbody>${rows}</tbody></table></div><div class="gp-side-divider" role="separator" aria-orientation="vertical" onmousedown="window.__gld.startSplitResize(event)" ontouchstart="window.__gld.startSplitResize(event)" title="Drag to resize (double-click to reset)"></div></div>`;

@@ -77,7 +77,9 @@ function main() {
   const fileContents = piped ? {} : getNewFileContents(parsed.files, newSideRef);
 
   // Full HTML generation
+  let expandInfo: { included: number; total: number } | null = null;
   const html = buildHtml({
+    onExpandSources: info => { expandInfo = info; },
     title: `gh-like-diff - ${gitInfo.repoName || 'diff'}`,
     repoName: gitInfo.repoName,
     branch: gitInfo.branch,
@@ -103,6 +105,7 @@ function main() {
     deletions: parsed.stats.totalDeletions,
     style: options.style === 'side' ? 'side-by-side' : 'unified',
     configPath,
+    expandInfo,
     outputPath,
   });
 
