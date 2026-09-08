@@ -689,12 +689,15 @@ body.gp-resizing * {
   border-left: 1px solid var(--gld-border);
   box-shadow: -4px 0 12px rgba(0,0,0,0.1);
   z-index: 1000;
-  transition: right 0.25s ease;
+  transition: right 0.25s ease, visibility 0.25s;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Off-screen alone still leaves the buttons inside reachable by Tab, so keyboard users
+     land on controls they cannot see. visibility removes them from the tab order. */
+  visibility: hidden;
 }
-.gp-memo-panel.open { right: 0; }
+.gp-memo-panel.open { right: 0; visibility: visible; }
 .gp-memo-panel-header {
   display: flex;
   justify-content: space-between;
@@ -1165,6 +1168,17 @@ body.gp-wrap .gp-unified-wrapper .gp-diff-table .gp-ln { position: static; }
   vertical-align: middle;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* Static stand-in for the view toggle when only one view was rendered. */
+.gp-view-label {
+  padding: 4px 10px;
+  border: 1px solid var(--gld-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--gld-fg-muted);
+  background: var(--gld-canvas-subtle);
+  white-space: nowrap;
 }
 `;
 }

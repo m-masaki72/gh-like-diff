@@ -118,3 +118,71 @@ describe('render', () => {
     expect(render(DIFF, { outputFormat: 'line-by-line' })).toContain('gp-view-unified');
   });
 });
+
+describe('single-view output', () => {
+  const bigDiff = (() => {
+    let d = '';
+    for (let f = 0; f < 10; f++) {
+      const p = `src/m${f}.ts`;
+      d += `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1,50 +1,50 @@\n`;
+      for (let i = 1; i <= 50; i++) {
+        d += `-const v${i} = ${i};\n`;
+        d += `+const v${i} = ${i * 2};\n`;
+      }
+    }
+    return d;
+  })();
+
+  it('roughly halves the output', () => {
+    const both = generate(bigDiff, { outputFormat: 'side-by-side' });
+    const one = generate(bigDiff, { outputFormat: 'side-by-side', singleView: true });
+    const saved = 1 - one.length / both.length;
+    expect(saved).toBeGreaterThan(0.35);
+    expect(saved).toBeLessThan(0.6);
+  });
+
+  it('renders only the requested view', () => {
+    // Both container divs stay in the markup (the client scopes queries by them); the
+    // point is that only one of them holds a table. Class names also occur in the inlined
+    // stylesheet, so count the tables rather than the names.
+    const tables = (html: string, view: 'side' | 'unified') =>
+      (html.match(new RegExp(`<div class="gp-view-${view}"><div`, 'g')) || []).length;
+
+    const side = generate(bigDiff, { outputFormat: 'side-by-side', singleView: true });
+    expect(tables(side, 'side')).toBe(10);
+    expect(tables(side, 'unified')).toBe(0);
+    expect(side).toContain('<div class="gp-view-unified"></div>');
+
+    const unified = generate(bigDiff, { outputFormat: 'line-by-line', singleView: true });
+    expect(tables(unified, 'unified')).toBe(10);
+    expect(tables(unified, 'side')).toBe(0);
+
+    const both = generate(bigDiff, { outputFormat: 'side-by-side' });
+    expect(tables(both, 'side')).toBe(10);
+    expect(tables(both, 'unified')).toBe(10);
+  });
+
+  it('replaces the view toggle with a static label', () => {
+    // A toggle that cannot switch is worse than none: it looks broken when clicked.
+    const one = generate(bigDiff, { outputFormat: 'side-by-side', singleView: true });
+    expect(one).not.toContain('id="gp-btn-unified"');
+    expect(one).not.toContain('id="gp-btn-split"');
+    expect(one).toContain('class="gp-view-label"');
+    expect(one).toContain('>Split<');
+  });
+
+  it('marks the document so the client refuses to switch views', () => {
+    // A stored view preference from a two-view page would otherwise blank the diff.
+    const one = generate(bigDiff, { outputFormat: 'line-by-line', singleView: true });
+    expect(one).toMatch(/<body[^>]*data-single-view="1"/);
+    expect(generate(bigDiff)).not.toContain('data-single-view');
+  });
+
+  it('keeps the rest of the page intact', () => {
+    const one = generate(bigDiff, { outputFormat: 'side-by-side', singleView: true });
+    for (const marker of ['gp-search', 'gp-memo-panel', 'gp-minimap', 'gp-sidebar',
+      'gp-review-progress', 'gp-shortcuts']) {
+      expect(one).toContain(marker);
+    }
+  });
+});

@@ -9,6 +9,7 @@ export interface CliOptions {
   noOpen: boolean;
   json: boolean;
   embed: boolean;
+  singleView: boolean;
   ignore: string[];
   colorScheme: 'auto' | 'dark' | 'light';
   refs: string[];
@@ -30,6 +31,7 @@ export function parseArgs(argv: string[]): CliOptions {
     .option('--no-open', 'Generate HTML but do not open browser')
     .option('--json', 'Output parsed diff as JSON', false)
     .option('--embed', 'Output HTML fragment only (no wrapper)', false)
+    .option('--single-view', 'Render only the selected view (about half the file size, no in-page view toggle)', false)
     .option('--ignore <patterns...>', 'Glob patterns to ignore (e.g., "*.meta")')
     .option('--color-scheme <scheme>', 'Color scheme: auto, dark, light', 'auto')
     .parse(argv);
@@ -47,6 +49,7 @@ export function parseArgs(argv: string[]): CliOptions {
     noOpen: opts.open === false,
     json: opts.json,
     embed: opts.embed,
+    singleView: opts.singleView,
     ignore: opts.ignore || [],
     colorScheme: opts.colorScheme || 'auto',
     refs,

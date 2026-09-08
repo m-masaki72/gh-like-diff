@@ -155,11 +155,12 @@ function buildHtmlPage(
   diffStr: string,
   format: 'side-by-side' | 'line-by-line',
   fileContents?: Record<string, string[]>,
+  singleView = false,
 ): string {
   const libPath = join(__dirname, '..', '..', '..', 'dist', 'index.js');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const lib = require(libPath);
-  return lib.generate(diffStr, { outputFormat: format, fileContents, repoName: 'fixture' });
+  return lib.generate(diffStr, { outputFormat: format, fileContents, singleView, repoName: 'fixture' });
 }
 
 function writePage(html: string, name: string): string {
@@ -174,6 +175,7 @@ export const test = base.extend<{
   unifiedDiffPageUrl: string;
   edgeCasePageUrl: string;
   edgeCaseUnifiedPageUrl: string;
+  singleViewPageUrl: string;
 }>({
   diffPageUrl: async ({}, use) => {
     await use(writePage(buildHtmlPage(SAMPLE_DIFF, 'side-by-side', SAMPLE_SOURCES), 'diff.html'));
@@ -188,6 +190,10 @@ export const test = base.extend<{
   edgeCaseUnifiedPageUrl: async ({}, use) => {
     const { diff, sources } = buildEdgeCaseDiff();
     await use(writePage(buildHtmlPage(diff, 'line-by-line', sources), 'edge-unified.html'));
+  },
+  // Only one view rendered — about half the bytes, and no in-page view toggle.
+  singleViewPageUrl: async ({}, use) => {
+    await use(writePage(buildHtmlPage(SAMPLE_DIFF, 'side-by-side', SAMPLE_SOURCES, true), 'single.html'));
   },
 });
 

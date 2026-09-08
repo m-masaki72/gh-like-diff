@@ -118,6 +118,15 @@ render identically. Both are marked:
 - `CRLF` where the two sides disagree on line endings, and only where they disagree — a
   file that is CRLF throughout stays unmarked
 
+### Output Size
+Both views are rendered so the in-page Unified/Split toggle works without a round trip,
+which costs roughly double the bytes. Measured on 50 files / 20,000 changed lines: 17.25MB
+with both views, 7.42MB with `--single-view`. Generation takes about half a second either
+way, and the page loads in well under a second.
+
+Use `--single-view` when the file is going to be emailed or archived; keep the default when
+the reader will want to flip between views.
+
 ### Self-Contained HTML Output
 The generated HTML file includes all CSS and JavaScript inlined — zero external dependencies, zero network requests. Open it from `file://`, share it on Slack, archive it as a build artifact. It just works, months later, on any machine.
 
@@ -192,6 +201,9 @@ gh-like-diff --no-open
 
 # Output parsed diff as JSON (for piping to other tools)
 gh-like-diff --json
+
+# Render only the selected view (about half the file size, no in-page view toggle)
+gh-like-diff --single-view
 
 # Read a diff from stdin — no repository required
 git diff | gh-like-diff

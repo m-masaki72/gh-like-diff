@@ -37,6 +37,9 @@ export function getToolbarScript(): string {
   }
 
   window.__gld.switchView = function(mode, persist) {
+    // With --single-view only one table was rendered; switching would leave the page
+    // pointing at a view that does not exist and show nothing at all.
+    if (document.body.dataset.singleView === '1') return;
     var next = mode === 'side' ? 'side' : 'line';
     if (document.body.dataset.view === next) return;
     var anchor = captureAnchor();

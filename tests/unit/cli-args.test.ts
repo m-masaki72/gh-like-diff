@@ -47,6 +47,11 @@ describe('parseArgs', () => {
     expect(o.save).toBe('review');
   });
 
+  it('reads --single-view', () => {
+    expect(args().singleView).toBe(false);
+    expect(args('--single-view').singleView).toBe(true);
+  });
+
   it('maps --no-open to noOpen', () => {
     expect(args().noOpen).toBe(false);
     expect(args('--no-open').noOpen).toBe(true);

@@ -19,6 +19,11 @@ export interface GhLikeDiffOptions {
    * omitted from the output rather than rendered inert.
    */
   fileContents?: Record<string, string[]>;
+  /**
+   * Render only `outputFormat` instead of both views. Roughly halves the output size; the
+   * in-page view toggle is replaced by a static label because there is nothing to switch to.
+   */
+  singleView?: boolean;
 }
 
 /**
@@ -52,6 +57,7 @@ export function generate(diffString: string, options: GhLikeDiffOptions = {}): s
     fileContents: options.fileContents,
     noNewline: parsed.noNewline,
     crlf: parsed.crlf,
+    singleView: options.singleView,
   });
 }
 

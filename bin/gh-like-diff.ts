@@ -84,6 +84,7 @@ function main() {
     fileContents,
     noNewline: parsed.noNewline,
     crlf: parsed.crlf,
+    singleView: options.singleView,
   });
 
   const outputPath = resolveOutputPath(options.save);
