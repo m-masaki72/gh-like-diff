@@ -8,7 +8,10 @@
 npx gh-like-diff                      # View local changes in your browser
 npx gh-like-diff main...HEAD          # PR-style diff from main
 npx gh-like-diff --staged --save pr   # Save staged diff to ~/Desktop/pr.html
+git diff | npx gh-like-diff           # Or pipe a diff in from anywhere
 ```
+
+![Side-by-side view](docs/images/side-by-side-light.png)
 
 ---
 
@@ -20,8 +23,18 @@ Side-by-side and unified diff views with GitHub's exact color palette, typograph
 ### Line Highlighting & Range Select
 Click any line number to highlight the row and update the URL hash (`#diff-{hash}L{num}`). Shift+click a second line to select a range — just like GitHub. Share the URL and the recipient will auto-scroll to the highlighted line.
 
+![Unified view in dark mode](docs/images/unified-dark.png)
+
+*Unified view, dark theme. Changed lines keep their syntax highlighting under the word-diff
+marker, and every gap offers both expand directions plus "show all".*
+
 ### Inline Review Memos
 Double-click a line number to attach a review note. Memos persist in `localStorage` and can be viewed in a side panel or exported as text. Perfect for offline code review without a PR.
+
+![Adding a review memo to a line](docs/images/review-memo.png)
+
+*Double-click a line number to attach a note. Memos live in localStorage, keyed to this
+particular diff, and can be exported as text or Markdown.*
 
 ### Review Progress Tracker
 Each file has a "Viewed" checkbox. A progress bar in the toolbar shows `3/12 files reviewed`. Press `r` to toggle the current file. State persists across page reloads.
@@ -34,6 +47,8 @@ Server-side syntax highlighting via highlight.js — only the CSS theme ships in
 
 ### Command Palette
 Press `Cmd+K` (or `Ctrl+K`) to open a command palette with fuzzy search across files and built-in actions (view switching, theme toggle, search, export). Navigate with arrow keys, press Enter to execute.
+
+![Command palette](docs/images/command-palette.png)
 
 ### Toast Notifications
 Non-intrusive feedback for clipboard operations — copy a file path or hunk code and see a slide-up confirmation toast that auto-dismisses.
@@ -74,6 +89,8 @@ A collapsible sidebar lists all changed files in a directory tree with:
 Press `/` to open a search overlay that highlights matches across the visible diff. Navigate
 results with `Enter` / `Shift+Enter`, and narrow the scope to added or deleted lines only.
 Highlighting is incremental but does not scroll the page while you type.
+
+![Searching within the diff](docs/images/search.png)
 
 ### Context Expansion
 GitHub-style expand buttons on every gap row: ▼ walks down from the top of the gap, ▲ walks

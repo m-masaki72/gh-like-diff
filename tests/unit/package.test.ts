@@ -104,3 +104,24 @@ describe('changelog', () => {
     expect(hasVersionHeading || unreleasedBody.trim().length > 0).toBe(true);
   });
 });
+
+describe('README images', () => {
+  const readme = readFileSync(join(root, 'README.md'), 'utf-8');
+  const refs = [...readme.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)].map(m => m[1]);
+
+  it('shows what the tool actually produces', () => {
+    // A diff viewer whose README has no picture of a diff is a hard sell.
+    expect(refs.length).toBeGreaterThan(0);
+  });
+
+  it('references files that exist', () => {
+    // npm rewrites relative image paths against the repository field, and GitHub resolves
+    // them directly, so a renamed file breaks the README in both places at once.
+    const missing = refs.filter(r => !/^https?:/.test(r) && !existsSync(join(root, r)));
+    expect(missing).toEqual([]);
+  });
+
+  it('can be regenerated rather than hand-maintained', () => {
+    expect(pkg.scripts.screenshots).toBeTruthy();
+  });
+});

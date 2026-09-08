@@ -33,9 +33,11 @@ export default tseslint.config(
     },
   },
 
-  // Tests may reach for `any` and non-null assertions to set up awkward states.
+  // Tests and tooling: they reach for `any` and non-null assertions to set up awkward
+  // states, and the screenshot script runs code inside the browser via page.evaluate, so
+  // both the Node and the DOM globals are legitimate here.
   {
-    files: ['tests/**/*.ts', '*.config.ts', 'eslint.config.js'],
+    files: ['tests/**/*.ts', '*.config.ts', 'eslint.config.js', 'scripts/**/*.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
