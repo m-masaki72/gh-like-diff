@@ -16,6 +16,22 @@ export interface CliOptions {
   refs: string[];
 }
 
+/** Shape of what commander parses, before defaults and the config file are resolved. */
+interface RawOptions {
+  style?: string;
+  staged: boolean;
+  file?: string;
+  context: string;
+  save?: string;
+  /** commander stores the negated `--no-open` under `open`. */
+  open?: boolean;
+  json: boolean;
+  embed: boolean;
+  singleView: boolean;
+  ignore?: string[];
+  colorScheme?: string;
+}
+
 /**
  * Precedence is CLI > config file > built-in default. Commander reports where each value
  * came from, which is the only way to tell "the user asked for side-by-side" apart from
@@ -42,7 +58,9 @@ export function parseArgs(argv: string[], fileConfig: FileConfig = {}): CliOptio
     .option('--color-scheme <scheme>', 'Color scheme: auto, dark, light', 'auto')
     .parse(argv);
 
-  const opts = program.opts();
+  // commander types opts() as `any`, so without this the entire CLI entry point — the one
+  // place untrusted input arrives — escapes type checking entirely.
+  const opts = program.opts<RawOptions>();
   const refs = program.args;
   const fromCli = (name: string) => program.getOptionValueSource(name) === 'cli';
 
@@ -55,8 +73,10 @@ export function parseArgs(argv: string[], fileConfig: FileConfig = {}): CliOptio
     ? (Number.isNaN(parsedContext) ? 3 : parsedContext)
     : fileConfig.context;
 
+  const validScheme = (v: string | undefined): CliOptions['colorScheme'] =>
+    v === 'dark' || v === 'light' ? v : 'auto';
   const colorScheme = fromCli('colorScheme') || fileConfig.colorScheme === undefined
-    ? (opts.colorScheme || 'auto')
+    ? validScheme(opts.colorScheme)
     : fileConfig.colorScheme;
 
   return {

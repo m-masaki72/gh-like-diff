@@ -12,7 +12,7 @@ vi.mock('node:fs', () => ({
   readFileSync: (...a: unknown[]) => readFileSync(...a),
 }));
 
-const { getGitDiff, getNewFileContents, getGitInfo } = await import('../../src/cli/git');
+const { getGitDiff, getNewFileContents, getGitInfo, getDiffStats } = await import('../../src/cli/git');
 
 function gitCall(index = 0): string[] {
   return spawnSync.mock.calls[index][1] as string[];
@@ -141,5 +141,68 @@ describe('getNewFileContents', () => {
   it('returns nothing when the repository root cannot be resolved', () => {
     execSync.mockImplementation(() => { throw new Error('no repo'); });
     expect(getNewFileContents(files, null)).toEqual({});
+  });
+});
+
+describe('getDiffStats', () => {
+  const DIFF = `diff --git a/a.ts b/a.ts
+--- a/a.ts
++++ b/a.ts
+@@ -1,2 +1,3 @@
+ keep
+-removed
++added
++also added
+diff --git a/b.ts b/b.ts
+--- a/b.ts
++++ b/b.ts
+@@ -1,1 +1,1 @@
+-gone
++here
+`;
+
+  it('counts files, additions and deletions', () => {
+    // The ---/+++ headers start with - and + and must not be counted as content.
+    expect(getDiffStats(DIFF)).toEqual({ fileCount: 2, additions: 3, deletions: 2 });
+  });
+
+  it('returns zeroes for an empty diff', () => {
+    expect(getDiffStats('')).toEqual({ fileCount: 0, additions: 0, deletions: 0 });
+  });
+
+  it('ignores hunk headers and context lines', () => {
+    const stats = getDiffStats('diff --git a/x b/x\n@@ -1 +1 @@\n unchanged\n');
+    expect(stats).toEqual({ fileCount: 1, additions: 0, deletions: 0 });
+  });
+});
+
+describe('getGitDiff fallbacks', () => {
+  it('keeps the file filter when retrying against HEAD', () => {
+    // Otherwise the retry silently widens the diff to the whole repository.
+    spawnSync
+      .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' })
+      .mockReturnValueOnce({ status: 0, stdout: 'from HEAD', stderr: '' });
+    getGitDiff({ fileFilter: 'src/app.ts' });
+    const retry = spawnSync.mock.calls[1][1] as string[];
+    expect(retry).toContain('HEAD');
+    expect(retry.slice(retry.indexOf('--') + 1)).toEqual(['src/app.ts']);
+  });
+
+  it('treats exit code 1 as "differences found", not an error', () => {
+    spawnSync.mockReturnValue({ status: 1, stdout: 'a diff', stderr: '' });
+    expect(getGitDiff({ refs: ['HEAD~1'] })).toBe('a diff');
+  });
+});
+
+describe('getNewFileContents limits', () => {
+  it('skips a file larger than the per-file cap', () => {
+    readFileSync.mockReturnValue('x'.repeat(600 * 1024));
+    expect(getNewFileContents([{ newName: 'big.ts', oldName: 'big.ts' }], null)).toEqual({});
+  });
+
+  it('skips a file when the git fallback also fails', () => {
+    readFileSync.mockImplementation(() => { throw new Error('ENOENT'); });
+    spawnSync.mockReturnValue({ status: 128, stdout: '' });
+    expect(getNewFileContents([{ newName: 'gone.ts', oldName: 'gone.ts' }], null)).toEqual({});
   });
 });

@@ -357,7 +357,7 @@ function renderUnifiedFile(file: DiffFile, fileIndex: number, options: RenderOpt
 
   if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3);
+    rows += renderExpandRow(fileIndex, gapIdx, last.oldEnd + 1, -1, last.newEnd + 1, -1, 3);
   }
 
   return `<div class="gp-unified-wrapper"><table class="gp-diff-table"><tbody>${rows}</tbody></table></div>`;
@@ -487,7 +487,7 @@ function renderSideFile(file: DiffFile, fileIndex: number, options: RenderOption
   // Expand pair: after last hunk (to EOF, resolved by JS)
   if (expandable && blocks.length > 0) {
     const last = getBlockEndLines(blocks[blocks.length - 1]);
-    rows += renderExpandRow(fileIndex, gapIdx++, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4);
+    rows += renderExpandRow(fileIndex, gapIdx, last.oldEnd + 1, -1, last.newEnd + 1, -1, 4);
   }
 
   return `<div class="gp-side-container"><div class="gp-side-wrapper"><table class="gp-diff-table gp-side-table"><tbody>${rows}</tbody></table></div><div class="gp-side-divider" role="separator" aria-orientation="vertical" onmousedown="window.__gld.startSplitResize(event)" ontouchstart="window.__gld.startSplitResize(event)" title="Drag to resize (double-click to reset)"></div></div>`;

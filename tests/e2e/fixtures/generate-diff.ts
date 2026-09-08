@@ -158,7 +158,7 @@ function buildHtmlPage(
   singleView = false,
 ): string {
   const libPath = join(__dirname, '..', '..', '..', 'dist', 'index.js');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const lib = require(libPath);
   return lib.generate(diffStr, { outputFormat: format, fileContents, singleView, repoName: 'fixture' });
 }

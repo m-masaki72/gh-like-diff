@@ -21,6 +21,22 @@ env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+        timeout-minutes: 5
+      # Type-aware rules need the TypeScript program, so this is slower than a plain lint
+      # and worth its own job rather than repeating it across the unit matrix.
+      - run: npm run lint
+
   unit:
     name: Unit (node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
@@ -48,6 +64,13 @@ jobs:
 
       - name: Unit tests
         run: npm run test -- --reporter=default --reporter=junit --outputFile=junit-unit.xml
+        timeout-minutes: 5
+
+      # One version is enough for coverage; the thresholds are the same everywhere and
+      # running it three times only slows the matrix down.
+      - name: Coverage
+        if: matrix.node-version == 20
+        run: npm run test:coverage
         timeout-minutes: 5
 
       - name: Upload unit test report
@@ -127,14 +150,15 @@ jobs:
     name: CI
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [unit, e2e]
+    needs: [lint, unit, e2e]
     if: ${{ always() }}
     steps:
       - name: Check results
         run: |
+          echo "lint: ${{ needs.lint.result }}"
           echo "unit: ${{ needs.unit.result }}"
           echo "e2e:  ${{ needs.e2e.result }}"
-          if [ "${{ needs.unit.result }}" != "success" ] || [ "${{ needs.e2e.result }}" != "success" ]; then
+          if [ "${{ needs.lint.result }}" != "success" ] || [ "${{ needs.unit.result }}" != "success" ] || [ "${{ needs.e2e.result }}" != "success" ]; then
             echo "::error::One or more required jobs did not succeed"
             exit 1
           fi

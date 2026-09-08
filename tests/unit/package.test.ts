@@ -47,7 +47,7 @@ describe('published entry points', () => {
   });
 
   it.skipIf(!built)('loads the CommonJS build and exposes the public API', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const lib = require(join(root, pkg.main));
     for (const fn of ['parse', 'generate', 'render']) {
       expect(typeof lib[fn], `${fn} is not exported`).toBe('function');

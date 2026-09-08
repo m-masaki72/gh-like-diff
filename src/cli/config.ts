@@ -82,7 +82,7 @@ function validate(raw: unknown, warnings: string[]): FileConfig {
   }
   if (input.ignore !== undefined) {
     if (Array.isArray(input.ignore) && input.ignore.every(v => typeof v === 'string')) {
-      out.ignore = input.ignore as string[];
+      out.ignore = input.ignore;
     } else warnings.push('ignore must be an array of strings');
   }
   if (input.singleView !== undefined) {
