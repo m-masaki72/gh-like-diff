@@ -477,3 +477,7 @@ npm run typecheck      # TypeScript type checking
 ## License
 
 MIT
+
+## 紹介ページ
+
+- [制作物ページ（Mori Lab）](https://morilab-garage.com/projects/gh-like-diff/)
